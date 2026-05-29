@@ -276,9 +276,7 @@ const ROLE_ACCESS = {
 const initState = {
   currentUser: null,
   users: [
-    { id: 1, name: "Admin Owner",    role: "owner",    email: "owner@freshspin.com",   password: "owner123",  pin: "1234", phone: "809-555-0001", avatar: "AO", active: true,  createdAt: "2025-01-01" },
-    { id: 2, name: "Luisa Fernández",role: "manager",  email: "luisa@freshspin.com",   password: "mgr123",    pin: "4321", phone: "809-555-0002", avatar: "LF", active: true,  createdAt: "2025-01-15" },
-    { id: 3, name: "María González", role: "employee", email: "maria@freshspin.com",   password: "emp123",    pin: "5678", phone: "829-555-0101", avatar: "MG", active: true,  createdAt: "2025-02-01" },
+    { id: 1, name: "Max", role: "manager", email: "maxforwork7@gmail.com", password: "Fresh1234", pin: "1234", phone: "", avatar: "MX", active: true, createdAt: "2026-01-01" },
     { id: 4, name: "Carlos Pérez",   role: "employee", email: "carlos@freshspin.com",  password: "emp456",    pin: "9012", phone: "829-555-0202", avatar: "CP", active: true,  createdAt: "2025-02-15" },
   ],
   clients: [
@@ -511,10 +509,7 @@ function LoginScreen({ state, dispatch }) {
           {t.login_btn}
         </button>
         <div style={{ marginTop: 20, padding: "12px 14px", background: C.gray50, borderRadius: 8, fontSize: 11, color: C.gray400, textAlign: "left", lineHeight: 1.8 }}>
-          <b style={{ color: C.gray600 }}>{t.login_demo}</b><br />
-          owner@freshspin.com / owner123<br />
-          luisa@freshspin.com / mgr123 (manager)<br />
-          maria@freshspin.com / emp123 (employee)
+          
         </div>
       </div>
     </div>
