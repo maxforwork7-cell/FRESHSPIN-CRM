@@ -1,10 +1,13 @@
 {
   "name": "freshspin-crm",
-  "version": "1.0.0",
-  "description": "FreshSpin CRM Platform",
+  "version": "2.0.0",
+  "description": "FreshSpin CRM Platform with PostgreSQL",
   "main": "freshspin-server.js",
   "scripts": {
     "start": "node freshspin-server.js"
+  },
+  "dependencies": {
+    "pg": "^8.11.3"
   },
   "engines": {
     "node": ">=18.0.0"
