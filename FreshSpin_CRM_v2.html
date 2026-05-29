@@ -277,7 +277,6 @@ const initState = {
   currentUser: null,
   users: [
     { id: 1, name: "Max", role: "manager", email: "maxforwork7@gmail.com", password: "Fresh1234", pin: "1234", phone: "", avatar: "MX", active: true, createdAt: "2026-01-01" },
-    { id: 4, name: "Carlos Pérez",   role: "employee", email: "carlos@freshspin.com",  password: "emp456",    pin: "9012", phone: "829-555-0202", avatar: "CP", active: true,  createdAt: "2025-02-15" },
   ],
   clients: [
     { id: 1, name: "Ana Rodríguez",   phone: "809-555-0101", email: "ana@email.com",   address: "Calle 5 #12, Santiago",    joinDate: "2025-01-10", loyalty: 120, notes: "Prefers express service" },
@@ -508,9 +507,7 @@ function LoginScreen({ state, dispatch }) {
         <button style={{ ...S.btn(), width: "100%", justifyContent: "center", padding: "11px 0", fontSize: 14 }} onClick={login}>
           {t.login_btn}
         </button>
-        <div style={{ marginTop: 20, padding: "12px 14px", background: C.gray50, borderRadius: 8, fontSize: 11, color: C.gray400, textAlign: "left", lineHeight: 1.8 }}>
-          
-        </div>
+        
       </div>
     </div>
   );
@@ -586,22 +583,53 @@ function Dashboard({ state, setActive }) {
   const { lang } = React.useContext(LangCtx);
   const t = T[lang];
   const role = state.currentUser.role;
-  const paidInvs = state.invoices.filter(i => i.status === "delivered");
-  const totalRevenue  = paidInvs.reduce((s, i) => s + i.total, 0);
-  const totalExpenses = state.expenses.reduce((s, e) => s + e.amount, 0);
-  const pending       = state.invoices.filter(i => i.status === "pending").length;
-  const myShifts = state.shifts.filter(s => s.employeeId === state.currentUser.id);
+  const [dateRange, setDateRange] = useState("all");
+  const isPriv = role === "owner" || role === "manager";
+
+  const filterByRange = (items, dateKey) => {
+    const now = new Date();
+    return items.filter(item => {
+      const d = new Date(item[dateKey]);
+      if (dateRange === "week") {
+        const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - now.getDay());
+        startOfWeek.setHours(0,0,0,0);
+        return d >= startOfWeek;
+      }
+      if (dateRange === "month") return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      if (dateRange === "year")  return d.getFullYear() === now.getFullYear();
+      return true;
+    });
+  };
+
+  const filteredInvs    = filterByRange(state.invoices, "date");
+  const filteredPaidInvs = filteredInvs.filter(i => i.status === "delivered");
+  const filteredExpenses = filterByRange(state.expenses, "date");
+  const totalRevenue    = filteredPaidInvs.reduce((s, i) => s + i.total, 0);
+  const totalExpenses   = filteredExpenses.reduce((s, e) => s + e.amount, 0);
+  const pending         = filteredInvs.filter(i => i.status === "pending").length;
+  const myShifts  = state.shifts.filter(s => s.employeeId === state.currentUser.id);
   const upcoming  = myShifts.filter(s => s.status === "scheduled").length;
   const completed = myShifts.filter(s => s.status === "completed").length;
-  const isPriv = role === "owner" || role === "manager";
+
+  const rangeLabels = { all: lang==="es"?"Todo":"All Time", week: lang==="es"?"Esta Semana":"This Week", month: lang==="es"?"Este Mes":"This Month", year: lang==="es"?"Este Año":"This Year" };
+  const btnStyle = (r) => ({ padding: "6px 14px", borderRadius: 20, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12, background: dateRange===r ? C.orange : C.gray100, color: dateRange===r ? "#fff" : C.gray600, transition: "all 0.2s" });
 
   return (
     <div>
-      <div style={{ marginBottom: 22 }}>
-        <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: C.gray900, letterSpacing: "-0.02em" }}>
-          {t.welcome}, {state.currentUser.name.split(" ")[0]} 👋
-        </h2>
-        <p style={{ margin: "4px 0 0", fontSize: 13, color: C.gray500 }}>{new Date().toLocaleDateString(lang === "es" ? "es-DO" : "en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
+      <div style={{ marginBottom: 22, display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: C.gray900, letterSpacing: "-0.02em" }}>
+            {t.welcome}, {state.currentUser.name.split(" ")[0]} 👋
+          </h2>
+          <p style={{ margin: "4px 0 0", fontSize: 13, color: C.gray500 }}>{new Date().toLocaleDateString(lang === "es" ? "es-DO" : "en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
+        </div>
+        {isPriv && (
+          <div style={{ display: "flex", gap: 6, background: C.gray50, padding: 4, borderRadius: 24, border: `1px solid ${C.gray200}` }}>
+            {["all","week","month","year"].map(r => (
+              <button key={r} style={btnStyle(r)} onClick={() => setDateRange(r)}>{rangeLabels[r]}</button>
+            ))}
+          </div>
+        )}
       </div>
 
       {isPriv ? (
@@ -611,7 +639,7 @@ function Dashboard({ state, setActive }) {
             <StatCard label={t.total_expenses} value={fmtCurrency(totalExpenses)}  icon="📉" color={C.red}      />
             <StatCard label={t.net_profit}     value={fmtCurrency(totalRevenue - totalExpenses)} icon="📈" color={totalRevenue - totalExpenses >= 0 ? C.orange : C.red} />
             <StatCard label={t.active_clients} value={state.clients.length}        icon="👥" color={C.teal}     />
-            <StatCard label={t.invoices}       value={state.invoices.length}       icon="🧾" color={C.gray600}  />
+            <StatCard label={t.invoices}       value={filteredInvs.length}         icon="🧾" color={C.gray600}  />
             <StatCard label={t.pending}        value={pending}                     icon="⏳" color={C.yellow}   />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
@@ -620,7 +648,7 @@ function Dashboard({ state, setActive }) {
               <table style={S.table}>
                 <thead><tr>{["ID", t.client_col, t.total, t.status].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
                 <tbody>
-                  {[...state.invoices].reverse().slice(0,5).map(i => (
+                  {[...filteredInvs].reverse().slice(0,5).map(i => (
                     <tr key={i.id}>
                       <td style={S.td}><b style={{ color: C.orange, fontSize: 12 }}>{i.id}</b></td>
                       <td style={S.td}>{i.clientName}</td>
@@ -636,7 +664,7 @@ function Dashboard({ state, setActive }) {
               <table style={S.table}>
                 <thead><tr>{[t.category, t.description, t.amount].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
                 <tbody>
-                  {[...state.expenses].reverse().slice(0,5).map(e => (
+                  {[...filteredExpenses].reverse().slice(0,5).map(e => (
                     <tr key={e.id}>
                       <td style={S.td}><Badge type="pending" label={e.category} /></td>
                       <td style={S.td}>{e.description}</td>
@@ -1329,19 +1357,39 @@ function Accounting({ state, dispatch }) {
   const [showForm, setShowForm] = useState(false);
   const [proofFile, setProofFile] = useState(null);
   const [proofViewer, setProofViewer] = useState(null);
+  const [dateRange, setDateRange] = useState("all");
 
-  const paidInvs  = state.invoices.filter(i => i.status === "delivered");
+  const filterByRange = (items, dateKey) => {
+    const now = new Date();
+    return items.filter(item => {
+      const d = new Date(item[dateKey]);
+      if (dateRange === "week") {
+        const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - now.getDay());
+        startOfWeek.setHours(0,0,0,0);
+        return d >= startOfWeek;
+      }
+      if (dateRange === "month") return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      if (dateRange === "year")  return d.getFullYear() === now.getFullYear();
+      return true;
+    });
+  };
+
+  const rangeLabels = { all: lang==="es"?"Todo":"All Time", week: lang==="es"?"Esta Semana":"This Week", month: lang==="es"?"Este Mes":"This Month", year: lang==="es"?"Este Año":"This Year" };
+  const btnStyle = (r) => ({ padding: "6px 14px", borderRadius: 20, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12, background: dateRange===r ? C.orange : C.gray100, color: dateRange===r ? "#fff" : C.gray600, transition: "all 0.2s" });
+
+  const paidInvs  = filterByRange(state.invoices.filter(i => i.status === "delivered"), "date");
+  const filteredExpenses = filterByRange(state.expenses, "date");
   const revenue   = paidInvs.reduce((s, i) => s + i.total, 0);
-  const expenses  = state.expenses.reduce((s, e) => s + e.amount, 0);
+  const expenses  = filteredExpenses.reduce((s, e) => s + e.amount, 0);
   const profit    = revenue - expenses;
 
   const months = {};
   paidInvs.forEach(i  => { const m = i.date.slice(0,7); if (!months[m]) months[m] = { rev: 0, exp: 0 }; months[m].rev += i.total; });
-  state.expenses.forEach(e => { const m = e.date.slice(0,7); if (!months[m]) months[m] = { rev: 0, exp: 0 }; months[m].exp += e.amount; });
+  filteredExpenses.forEach(e => { const m = e.date.slice(0,7); if (!months[m]) months[m] = { rev: 0, exp: 0 }; months[m].exp += e.amount; });
 
   const allMonths = Object.keys(months).sort();
   const expByCatMonth = {};
-  state.expenses.forEach(e => {
+  filteredExpenses.forEach(e => {
     const m = e.date.slice(0,7);
     if (!expByCatMonth[e.category]) expByCatMonth[e.category] = {};
     expByCatMonth[e.category][m] = (expByCatMonth[e.category][m] || 0) + e.amount;
@@ -1412,6 +1460,14 @@ function Accounting({ state, dispatch }) {
         </>}
       </PageHeader>
 
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 6, background: C.gray50, padding: 4, borderRadius: 24, border: `1px solid ${C.gray200}` }}>
+          {["all","week","month","year"].map(r => (
+            <button key={r} style={btnStyle(r)} onClick={() => setDateRange(r)}>{rangeLabels[r]}</button>
+          ))}
+        </div>
+      </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 22 }}>
         <StatCard label={t.total_revenue}  value={fmtCurrency(revenue)}  icon="💰" color={C.green} />
         <StatCard label={t.total_expenses} value={fmtCurrency(expenses)} icon="📉" color={C.red} />
@@ -1470,7 +1526,7 @@ function Accounting({ state, dispatch }) {
           <table style={S.table}>
             <thead><tr>{[t.category,t.description,t.amount,t.date,t.recorded_by,t.proof,""].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
             <tbody>
-              {[...state.expenses].reverse().map(e => (
+              {[...filteredExpenses].reverse().map(e => (
                 <tr key={e.id}>
                   <td style={S.td}><Badge type="pending" label={e.category} /></td>
                   <td style={S.td}>{e.description}</td>
