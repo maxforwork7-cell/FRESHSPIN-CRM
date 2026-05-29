@@ -1,0 +1,12 @@
+{
+  "name": "freshspin-crm",
+  "version": "1.0.0",
+  "description": "FreshSpin CRM Platform",
+  "main": "freshspin-server.js",
+  "scripts": {
+    "start": "node freshspin-server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

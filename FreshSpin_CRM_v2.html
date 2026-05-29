@@ -1,0 +1,2007 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FreshSpin CRM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #F0F4F8; font-family: 'DM Sans', 'Segoe UI', system-ui, sans-serif; }
+  @media print {
+    #sidebar { display: none !important; }
+    #main { padding: 0 !important; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useReducer, useEffect, useRef } = React;
+
+// ─── COLOUR TOKENS ─────────────────────────────────────────────────────────
+const C = {
+  orange: "#E8650A", orangeD: "#C4530A", orangeL: "#FEE4CC",
+  teal: "#0891B2",   tealD: "#0670A0",   tealL: "#CFFAFE",
+  white: "#FFFFFF",  gray50: "#F8FAFC",  gray100: "#F1F5F9",
+  gray150: "#EAF0F6",gray200: "#E2E8F0", gray300: "#CBD5E1",
+  gray400: "#94A3B8",gray500: "#64748B", gray600: "#475569",
+  gray700: "#334155",gray800: "#1E293B", gray900: "#0F172A",
+  green: "#16A34A",  greenL: "#DCFCE7",
+  red: "#DC2626",    redL: "#FEE2E2",
+  yellow: "#D97706", yellowL: "#FEF3C7",
+  purple: "#7C3AED", purpleL: "#EDE9FE",
+};
+
+// ─── LANGUAGE CONTEXT & TRANSLATIONS ───────────────────────────────────────
+const LangCtx = React.createContext({ lang: "en", setLang: () => {} });
+
+const T = {
+  en: {
+    nav_dashboard:"Dashboard", nav_pos:"POS / Invoices", nav_clients:"Clients",
+    nav_shifts:"My Shifts", nav_accounting:"Accounting", nav_hr:"HR & Payroll",
+    nav_employees:"Employees", logout:"← Log Out",
+    login_subtitle:"Laundry · CRM System", login_email:"Email Address",
+    login_password:"Password", login_btn:"Sign In →", login_demo:"Demo accounts",
+    login_error:"Invalid credentials or account inactive.",
+    back:"← Back", back_to_invoices:"← Back to Invoices", edit:"Edit", del:"Del",
+    view:"View", date:"Date", status:"Status", actions:"Actions", total:"Total",
+    phone:"Phone", email:"Email", address:"Address", role:"Role",
+    pending:"Pending", delivered:"Delivered", all:"All",
+    welcome:"Welcome back",
+    total_revenue:"Total Revenue", total_expenses:"Total Expenses",
+    net_profit:"Net Profit", active_clients:"Active Clients",
+    invoices:"Invoices", recent_invoices:"Recent Invoices",
+    latest_expenses:"Latest Expenses", my_upcoming:"My Upcoming Shifts",
+    completed_shifts:"Completed Shifts", invoices_created:"Invoices I Created",
+    pos_title:"POS / Invoices", new_invoice:"+ New Invoice",
+    new_invoice_title:"New Invoice", search_invoice:"Search invoice or client…",
+    invoice_num:"Invoice #", services:"Services", created_by:"Created By",
+    billed_to:"BILLED TO", print:"🖨 Print",
+    mark_delivered:"✓ Mark Delivered", mark_pending:"⏳ Mark Pending",
+    generate_invoice:"🧾 Generate Invoice", add_line:"+ Add Line",
+    note_optional:"Note (optional)", internal_note:"Internal note…",
+    client_search_lbl:"Client — Search or select",
+    client_search_ph:"Type name or phone to search…",
+    or_select_list:"Or select from list", select_client:"— Select client —",
+    no_invoices:"No invoices found.",
+    alert_client:"Please select a client.",
+    alert_service:"Add at least one service.",
+    qty:"Qty", unit_price:"Unit Price",
+    thank_you:"Thank you for choosing FreshSpin · ¡Gracias!",
+    clients_title:"Client Database", new_client:"+ New Client",
+    search_clients:"🔍 Search name, phone, email…", client_col:"Client",
+    joined:"Joined", loyalty:"Loyalty", invoice_btn:"🧾 Invoice",
+    history:"History", no_clients:"No clients found.",
+    edit_client:"Edit Client", new_client_title:"New Client",
+    full_name:"Full Name", internal_notes:"Internal Notes",
+    notes_ph:"Preferences, allergies, etc.",
+    update_client:"Update Client", register_client:"Register Client",
+    alert_name_phone:"Name and phone required.",
+    invoice_history:"Invoice History", no_invoices_yet:"No invoices yet.",
+    create_invoice_for:"Create New Invoice for",
+    shifts_title:"My Shifts", total_shifts:"Total Shifts",
+    upcoming:"Upcoming", completed:"Completed", total_hours:"Total Hours",
+    start:"Start", end:"End", hours:"Hours", no_shifts:"No shifts found.",
+    accounting_title:"Accounting & Finance", excel_report:"⬇ Excel Report",
+    record_expense:"+ Record Expense", tab_monthly:"📊 Monthly",
+    tab_income:"💰 Income", tab_expenses:"📉 Expenses", tab_report:"📋 Report",
+    month:"Month", revenue:"Revenue", expenses_col:"Expenses", margin:"Margin",
+    category:"Category", description:"Description", amount:"Amount",
+    recorded_by:"Recorded By", proof:"Proof", no_data:"No data available yet.",
+    record_new_expense:"Record New Expense", amount_rd:"Amount (RD$)",
+    proof_optional:"Proof — Photo or PDF (optional)",
+    attach_file:"Click to attach file", click_to_replace:"Click to replace",
+    file_types:"JPG, PNG, PDF accepted", ready_to_attach:"ready to attach",
+    record_expense_btn:"📉 Record Expense", alert_fill:"Fill all fields.",
+    confirm_del_expense:"Delete expense?", proof_title:"Expense Proof",
+    download_pdf:"⬇ Download PDF",
+    pdf_note:"Click the button above to download and open the PDF.",
+    pl_summary:"Profit & Loss Summary", generated:"Generated:",
+    annual_total:"Annual Total", row_revenue:"💰 Total Revenue",
+    row_expenses:"📉 Total Expenses", row_profit:"📈 Gross Profit / (Loss)",
+    row_margin:"Net Profit Margin %",
+    monthly_breakdown:"Monthly Expense Breakdown",
+    line_item:"Line Item", total_monthly:"TOTAL MONTHLY EXPENSES",
+    freshspin_lbl:"FreshSpin Dry & Laundry",
+    hr_title:"HR & Payroll", schedule_shift:"+ Schedule Shift",
+    tab_shifts:"📅 Shifts", tab_payroll:"💵 Payroll", tab_cfg:"⚙ Config",
+    employee:"Employee", done_btn:"✓ Done", regular:"Regular",
+    overtime:"Overtime", gross_pay:"Gross Pay", pay_slip:"Pay Slip",
+    total_payroll:"Total Payroll:", hr_cfg_title:"HR Configuration",
+    hourly_rate:"Hourly Rate (RD$)", overtime_mult:"Overtime Multiplier",
+    pay_period:"Pay Period",
+    cfg_note:"✓ Changes apply to the next payroll calculation.",
+    schedule_shift_title:"Schedule a Shift",
+    select_employee:"— Select employee —",
+    duration:"Duration:", schedule_btn:"📅 Schedule Shift",
+    emp_title:"Employee Management", search_emp:"Search employees…",
+    new_emp:"+ New Employee", activate:"Activate", deactivate:"Deactivate",
+    new_emp_profile:"New Employee Profile", pin_lbl:"PIN (4 digits)",
+    pin_ph:"4-digit PIN",
+    credentials_warn:"⚠ Share credentials securely. The employee should change their password on first login.",
+    save_changes:"Save Changes", create_emp_profile:"Create Employee Profile",
+    alert_emp_fields:"Name, email and password are required.",
+    joined_lbl:"Joined", password_lbl:"Password",
+    password_ph:"Login password", inactive_lbl:"INACTIVE",
+    access_restricted:"🔒 Access restricted for your role.",
+    confirm_del_client:"Delete client?",
+    confirm_del_invoice:"Delete this invoice?",
+    confirm_del_shift:"Delete shift?",
+    subscriptions:"Subscriptions", tab_clients_list:"Client List",
+    subscribe:"+ Subscribe", new_subscription:"New Subscription",
+    sub_plan:"Plan", sub_amount:"Amount (RD$)", start_date:"Start Date",
+    expiration:"Expiration", days_left:"Days Left",
+    active_sub:"Active", on_hold_sub:"On Hold", expired_sub:"Expired",
+    cancelled_sub:"Cancelled", renew:"↺ Renew", hold_sub:"⏸ Hold",
+    resume_sub:"▶ Resume", cancel_sub:"✕ Cancel",
+    no_subscriptions:"No subscriptions yet.",
+    save_subscription:"💾 Save Subscription",
+    confirm_cancel_sub:"Cancel this subscription?",
+    sub_days:"days",
+  },
+  es: {
+    nav_dashboard:"Inicio", nav_pos:"POS / Facturas", nav_clients:"Clientes",
+    nav_shifts:"Mis Turnos", nav_accounting:"Contabilidad",
+    nav_hr:"RRHH & Nómina", nav_employees:"Empleados",
+    logout:"← Cerrar Sesión",
+    login_subtitle:"Lavandería · Sistema CRM",
+    login_email:"Correo Electrónico", login_password:"Contraseña",
+    login_btn:"Iniciar Sesión →", login_demo:"Cuentas demo",
+    login_error:"Credenciales inválidas o cuenta inactiva.",
+    back:"← Atrás", back_to_invoices:"← Volver a Facturas",
+    edit:"Editar", del:"Elim.", view:"Ver",
+    date:"Fecha", status:"Estado", actions:"Acciones", total:"Total",
+    phone:"Teléfono", email:"Correo", address:"Dirección", role:"Rol",
+    pending:"Pendiente", delivered:"Entregado", all:"Todos",
+    welcome:"Bienvenido/a",
+    total_revenue:"Ingresos Totales", total_expenses:"Gastos Totales",
+    net_profit:"Ganancia Neta", active_clients:"Clientes Activos",
+    invoices:"Facturas", recent_invoices:"Facturas Recientes",
+    latest_expenses:"Últimos Gastos", my_upcoming:"Mis Próximos Turnos",
+    completed_shifts:"Turnos Completados",
+    invoices_created:"Facturas que Creé",
+    pos_title:"POS / Facturas", new_invoice:"+ Nueva Factura",
+    new_invoice_title:"Nueva Factura",
+    search_invoice:"Buscar factura o cliente…",
+    invoice_num:"Factura #", services:"Servicios", created_by:"Creado Por",
+    billed_to:"FACTURADO A", print:"🖨 Imprimir",
+    mark_delivered:"✓ Marcar Entregado", mark_pending:"⏳ Marcar Pendiente",
+    generate_invoice:"🧾 Generar Factura", add_line:"+ Añadir Línea",
+    note_optional:"Nota (opcional)", internal_note:"Nota interna…",
+    client_search_lbl:"Cliente — Buscar o seleccionar",
+    client_search_ph:"Escribe nombre o teléfono…",
+    or_select_list:"O selecciona de la lista",
+    select_client:"— Seleccionar cliente —",
+    no_invoices:"No se encontraron facturas.",
+    alert_client:"Por favor selecciona un cliente.",
+    alert_service:"Añade al menos un servicio.",
+    qty:"Cant.", unit_price:"Precio Unit.",
+    thank_you:"Gracias por elegir FreshSpin · Thank you!",
+    clients_title:"Base de Clientes", new_client:"+ Nuevo Cliente",
+    search_clients:"🔍 Buscar nombre, teléfono, correo…",
+    client_col:"Cliente", joined:"Registro", loyalty:"Puntos",
+    invoice_btn:"🧾 Factura", history:"Historial",
+    no_clients:"No se encontraron clientes.",
+    edit_client:"Editar Cliente", new_client_title:"Nuevo Cliente",
+    full_name:"Nombre Completo", internal_notes:"Notas Internas",
+    notes_ph:"Preferencias, alergias, etc.",
+    update_client:"Actualizar Cliente", register_client:"Registrar Cliente",
+    alert_name_phone:"Nombre y teléfono son obligatorios.",
+    invoice_history:"Historial de Facturas",
+    no_invoices_yet:"Sin facturas aún.",
+    create_invoice_for:"Crear Nueva Factura para",
+    shifts_title:"Mis Turnos", total_shifts:"Total Turnos",
+    upcoming:"Próximos", completed:"Completados",
+    total_hours:"Total Horas", start:"Entrada", end:"Salida",
+    hours:"Horas", no_shifts:"No se encontraron turnos.",
+    accounting_title:"Contabilidad y Finanzas",
+    excel_report:"⬇ Reporte Excel", record_expense:"+ Registrar Gasto",
+    tab_monthly:"📊 Mensual", tab_income:"💰 Ingresos",
+    tab_expenses:"📉 Gastos", tab_report:"📋 Reporte",
+    month:"Mes", revenue:"Ingresos", expenses_col:"Gastos", margin:"Margen",
+    category:"Categoría", description:"Descripción", amount:"Monto",
+    recorded_by:"Registrado Por", proof:"Comprobante",
+    no_data:"Sin datos disponibles aún.",
+    record_new_expense:"Registrar Nuevo Gasto", amount_rd:"Monto (RD$)",
+    proof_optional:"Comprobante — Foto o PDF (opcional)",
+    attach_file:"Clic para adjuntar archivo",
+    click_to_replace:"Clic para reemplazar",
+    file_types:"JPG, PNG, PDF aceptados",
+    ready_to_attach:"listo para adjuntar",
+    record_expense_btn:"📉 Registrar Gasto",
+    alert_fill:"Completa todos los campos.",
+    confirm_del_expense:"¿Eliminar gasto?",
+    proof_title:"Comprobante de Gasto", download_pdf:"⬇ Descargar PDF",
+    pdf_note:"Haz clic arriba para descargar y abrir el PDF.",
+    pl_summary:"Resumen de Pérdidas y Ganancias", generated:"Generado:",
+    annual_total:"Total Anual", row_revenue:"💰 Ingresos Totales",
+    row_expenses:"📉 Gastos Totales",
+    row_profit:"📈 Ganancia Bruta / (Pérdida)",
+    row_margin:"Margen de Ganancia Neta %",
+    monthly_breakdown:"Desglose Mensual de Gastos",
+    line_item:"Concepto", total_monthly:"TOTAL GASTOS MENSUALES",
+    freshspin_lbl:"FreshSpin Lavandería",
+    hr_title:"RRHH & Nómina", schedule_shift:"+ Programar Turno",
+    tab_shifts:"📅 Turnos", tab_payroll:"💵 Nómina", tab_cfg:"⚙ Config",
+    employee:"Empleado", done_btn:"✓ Listo", regular:"Regular",
+    overtime:"Horas Extra", gross_pay:"Salario Bruto",
+    pay_slip:"Recibo de Pago", total_payroll:"Nómina Total:",
+    hr_cfg_title:"Configuración RRHH",
+    hourly_rate:"Tarifa por Hora (RD$)",
+    overtime_mult:"Multiplicador Horas Extra", pay_period:"Período de Pago",
+    cfg_note:"✓ Los cambios aplican al siguiente cálculo.",
+    schedule_shift_title:"Programar un Turno",
+    select_employee:"— Seleccionar empleado —",
+    duration:"Duración:", schedule_btn:"📅 Programar Turno",
+    emp_title:"Gestión de Empleados", search_emp:"Buscar empleados…",
+    new_emp:"+ Nuevo Empleado", activate:"Activar", deactivate:"Desactivar",
+    new_emp_profile:"Nuevo Perfil de Empleado",
+    pin_lbl:"PIN (4 dígitos)", pin_ph:"PIN de 4 dígitos",
+    credentials_warn:"⚠ Comparte las credenciales de forma segura. El empleado debe cambiar su contraseña al primer inicio.",
+    save_changes:"Guardar Cambios",
+    create_emp_profile:"Crear Perfil de Empleado",
+    alert_emp_fields:"Nombre, correo y contraseña son obligatorios.",
+    joined_lbl:"Ingresó", password_lbl:"Contraseña",
+    password_ph:"Contraseña de acceso", inactive_lbl:"INACTIVO",
+    access_restricted:"🔒 Acceso restringido para tu rol.",
+    confirm_del_client:"¿Eliminar cliente?",
+    confirm_del_invoice:"¿Eliminar esta factura?",
+    confirm_del_shift:"¿Eliminar turno?",
+    subscriptions:"Suscripciones", tab_clients_list:"Lista de Clientes",
+    subscribe:"+ Suscribir", new_subscription:"Nueva Suscripción",
+    sub_plan:"Plan", sub_amount:"Monto (RD$)", start_date:"Fecha Inicio",
+    expiration:"Vencimiento", days_left:"Días Rest.",
+    active_sub:"Activo", on_hold_sub:"En Pausa", expired_sub:"Vencido",
+    cancelled_sub:"Cancelado", renew:"↺ Renovar", hold_sub:"⏸ Pausar",
+    resume_sub:"▶ Reanudar", cancel_sub:"✕ Cancelar",
+    no_subscriptions:"Sin suscripciones aún.",
+    save_subscription:"💾 Guardar Suscripción",
+    confirm_cancel_sub:"¿Cancelar esta suscripción?",
+    sub_days:"días",
+  },
+};
+
+const ROLE_ACCESS = {
+  owner:    ["dashboard","pos","clients","accounting","hr","employees"],
+  manager:  ["dashboard","pos","clients","accounting","hr","employees"],
+  employee: ["pos","clients","shifts"],
+};
+
+const initState = {
+  currentUser: null,
+  users: [
+    { id: 1, name: "Admin Owner",    role: "owner",    email: "owner@freshspin.com",   password: "owner123",  pin: "1234", phone: "809-555-0001", avatar: "AO", active: true,  createdAt: "2025-01-01" },
+    { id: 2, name: "Luisa Fernández",role: "manager",  email: "luisa@freshspin.com",   password: "mgr123",    pin: "4321", phone: "809-555-0002", avatar: "LF", active: true,  createdAt: "2025-01-15" },
+    { id: 3, name: "María González", role: "employee", email: "maria@freshspin.com",   password: "emp123",    pin: "5678", phone: "829-555-0101", avatar: "MG", active: true,  createdAt: "2025-02-01" },
+    { id: 4, name: "Carlos Pérez",   role: "employee", email: "carlos@freshspin.com",  password: "emp456",    pin: "9012", phone: "829-555-0202", avatar: "CP", active: true,  createdAt: "2025-02-15" },
+  ],
+  clients: [
+    { id: 1, name: "Ana Rodríguez",   phone: "809-555-0101", email: "ana@email.com",   address: "Calle 5 #12, Santiago",    joinDate: "2025-01-10", loyalty: 120, notes: "Prefers express service" },
+    { id: 2, name: "Pedro Martínez",  phone: "809-555-0202", email: "pedro@email.com", address: "Av. Francia #34, Santiago", joinDate: "2025-02-14", loyalty: 85,  notes: "" },
+    { id: 3, name: "Luisa Torres",    phone: "829-555-0303", email: "luisa@email.com", address: "Los Jardines #7, Santiago", joinDate: "2025-03-01", loyalty: 45,  notes: "Allergic to fabric softener" },
+    { id: 4, name: "Roberto Sánchez", phone: "809-555-0404", email: "roberto@email.com",address: "Calle 12 #9, Santiago",  joinDate: "2025-03-20", loyalty: 200, notes: "VIP client" },
+  ],
+  invoices: [
+    { id: "INV-001", clientId: 1, clientName: "Ana Rodríguez",   services: [{ name: "Wash & Fold", qty: 3, price: 250 }], total: 750,  date: "2025-04-01", status: "delivered", createdBy: "María González",  notes: "" },
+    { id: "INV-002", clientId: 2, clientName: "Pedro Martínez",  services: [{ name: "Dry Cleaning (suit)", qty: 2, price: 600 }, { name: "Express Delivery", qty: 1, price: 150 }], total: 1350, date: "2025-04-05", status: "delivered", createdBy: "Carlos Pérez",     notes: "" },
+    { id: "INV-003", clientId: 3, clientName: "Luisa Torres",    services: [{ name: "Wash & Fold", qty: 2, price: 250 }], total: 500,  date: "2025-04-10", status: "pending",   createdBy: "María González",  notes: "Waiting for pickup" },
+    { id: "INV-004", clientId: 4, clientName: "Roberto Sánchez", services: [{ name: "Dry Cleaning (shirt)", qty: 5, price: 350 }, { name: "Iron & Press", qty: 3, price: 120 }], total: 2110, date: "2025-04-15", status: "delivered", createdBy: "Luisa Fernández", notes: "" },
+  ],
+  expenses: [
+    { id: 1, category: "Utilities",   description: "Electricity bill",       amount: 4200, date: "2025-04-01", createdBy: "Admin Owner" },
+    { id: 2, category: "Supplies",    description: "Detergents & packaging", amount: 1800, date: "2025-04-05", createdBy: "Luisa Fernández" },
+    { id: 3, category: "Maintenance", description: "Machine service",        amount: 2500, date: "2025-04-12", createdBy: "Admin Owner" },
+    { id: 4, category: "Rent",        description: "Monthly rent",           amount: 8500, date: "2025-04-01", createdBy: "Luisa Fernández" },
+  ],
+  shifts: [
+    { id: 1, employeeId: 3, employeeName: "María González", date: "2025-04-28", start: "08:00", end: "16:00", hours: 8, status: "completed" },
+    { id: 2, employeeId: 4, employeeName: "Carlos Pérez",   date: "2025-04-28", start: "12:00", end: "20:00", hours: 8, status: "completed" },
+    { id: 3, employeeId: 3, employeeName: "María González", date: "2025-04-29", start: "08:00", end: "16:00", hours: 8, status: "scheduled" },
+    { id: 4, employeeId: 4, employeeName: "Carlos Pérez",   date: "2025-04-29", start: "12:00", end: "20:00", hours: 8, status: "scheduled" },
+  ],
+  hrConfig: { hourlyRate: 85, overtimeMultiplier: 1.5, payPeriod: "biweekly" },
+  subscriptions: [],
+};
+
+function reducer(state, action) {
+  switch (action.type) {
+    case "LOGIN":              return { ...state, currentUser: action.user };
+    case "LOGOUT":             return { ...state, currentUser: null };
+    case "ADD_CLIENT":         return { ...state, clients: [...state.clients, action.client] };
+    case "UPDATE_CLIENT":      return { ...state, clients: state.clients.map(c => c.id === action.client.id ? action.client : c) };
+    case "DELETE_CLIENT":      return { ...state, clients: state.clients.filter(c => c.id !== action.id) };
+    case "ADD_INVOICE":        return { ...state, invoices: [...state.invoices, action.invoice] };
+    case "UPDATE_INVOICE_STATUS": {
+      const inv = state.invoices.find(i => i.id === action.id);
+      const loyaltyGain = inv && inv.status !== "delivered" && action.status === "delivered" ? Math.floor(inv.total / 10) : 0;
+      return {
+        ...state,
+        invoices: state.invoices.map(i => i.id === action.id ? { ...i, status: action.status } : i),
+        clients: loyaltyGain > 0 ? state.clients.map(c => c.id === inv.clientId ? { ...c, loyalty: c.loyalty + loyaltyGain } : c) : state.clients,
+      };
+    }
+    case "DELETE_INVOICE":     return { ...state, invoices: state.invoices.filter(i => i.id !== action.id) };
+    case "ADD_EXPENSE":        return { ...state, expenses: [...state.expenses, action.expense] };
+    case "DELETE_EXPENSE":     return { ...state, expenses: state.expenses.filter(e => e.id !== action.id) };
+    case "ADD_SHIFT":          return { ...state, shifts: [...state.shifts, action.shift] };
+    case "UPDATE_SHIFT":       return { ...state, shifts: state.shifts.map(s => s.id === action.shift.id ? action.shift : s) };
+    case "DELETE_SHIFT":       return { ...state, shifts: state.shifts.filter(s => s.id !== action.id) };
+    case "UPDATE_HR_CONFIG":   return { ...state, hrConfig: { ...state.hrConfig, ...action.config } };
+    case "ADD_SUBSCRIPTION":    return { ...state, subscriptions: [...(state.subscriptions||[]), action.sub] };
+    case "UPDATE_SUBSCRIPTION": return { ...state, subscriptions: (state.subscriptions||[]).map(s => s.id === action.sub.id ? action.sub : s) };
+    case "ADD_USER":           return { ...state, users: [...state.users, action.user] };
+    case "UPDATE_USER":        return { ...state, users: state.users.map(u => u.id === action.user.id ? action.user : u) };
+    case "TOGGLE_USER_ACTIVE": return { ...state, users: state.users.map(u => u.id === action.id ? { ...u, active: !u.active } : u) };
+    default:                   return state;
+  }
+}
+
+const fmtCurrency = n => `RD$${Number(n).toLocaleString()}`;
+const today = () => new Date().toISOString().split("T")[0];
+const uid = () => Math.random().toString(36).slice(2, 8).toUpperCase();
+const initials = name => name.split(" ").map(w => w[0]).slice(0,2).join("").toUpperCase();
+const avatarColor = (role) => role === "owner" ? C.orange : role === "manager" ? C.purple : C.teal;
+
+const S = {
+  page:  { minHeight: "100vh", background: "#F0F4F8", fontFamily: "'DM Sans', 'Segoe UI', system-ui, sans-serif", fontSize: 14 },
+  card:  { background: C.white, borderRadius: 14, padding: "20px 24px", boxShadow: "0 1px 3px rgba(0,0,0,.06), 0 1px 8px rgba(0,0,0,.04)", border: `1px solid ${C.gray200}` },
+  cardSm:{ background: C.white, borderRadius: 10, padding: "14px 18px", boxShadow: "0 1px 3px rgba(0,0,0,.06)", border: `1px solid ${C.gray200}` },
+  btn: (bg = C.orange, fg = "#fff") => ({
+    background: bg, color: fg, border: "none", borderRadius: 9, padding: "8px 18px",
+    fontWeight: 700, fontSize: 13, cursor: "pointer", display: "inline-flex",
+    alignItems: "center", gap: 6, letterSpacing: "0.01em", transition: "opacity .15s",
+  }),
+  btnSm: (bg = C.orange, fg = "#fff") => ({
+    background: bg, color: fg, border: "none", borderRadius: 7, padding: "5px 12px",
+    fontWeight: 700, fontSize: 12, cursor: "pointer", display: "inline-flex",
+    alignItems: "center", gap: 4,
+  }),
+  input: {
+    width: "100%", border: `1.5px solid ${C.gray200}`, borderRadius: 9,
+    padding: "9px 13px", fontSize: 13, outline: "none", boxSizing: "border-box",
+    fontFamily: "inherit", background: C.white, color: C.gray800,
+    transition: "border-color .15s",
+  },
+  label: { fontSize: 11, fontWeight: 700, color: C.gray500, marginBottom: 5, display: "block", textTransform: "uppercase", letterSpacing: "0.06em" },
+  badge: (bg, fg) => ({ background: bg, color: fg || "#666", borderRadius: 20, padding: "3px 10px", fontSize: 11, fontWeight: 700, display: "inline-block" }),
+  table: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
+  th:    { background: C.gray50, padding: "10px 14px", textAlign: "left", fontWeight: 700, fontSize: 11, color: C.gray500, borderBottom: `1px solid ${C.gray200}`, textTransform: "uppercase", letterSpacing: "0.05em" },
+  td:    { padding: "12px 14px", borderBottom: `1px solid ${C.gray100}`, verticalAlign: "middle", color: C.gray700 },
+};
+
+const BADGE = {
+  delivered: [C.greenL,  C.green],
+  paid:      [C.greenL,  C.green],
+  pending:   [C.yellowL, C.yellow],
+  completed: [C.greenL,  C.green],
+  scheduled: [C.tealL,   C.teal],
+  cancelled: [C.redL,    C.red],
+  owner:     [C.orangeL, C.orangeD],
+  manager:   [C.purpleL, C.purple],
+  employee:  [C.tealL,   C.teal],
+  active:    [C.greenL,  C.green],
+  inactive:  [C.gray200, C.gray500],
+};
+
+function Badge({ type, label }) {
+  const [bg, fg] = BADGE[type] || [C.gray200, C.gray600];
+  return <span style={{ ...S.badge(bg, fg) }}>{label || type}</span>;
+}
+
+function Avatar({ name, role, size = 36 }) {
+  const bg = avatarColor(role);
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: "50%", background: bg + "22",
+      border: `2px solid ${bg}44`, display: "flex", alignItems: "center",
+      justifyContent: "center", fontWeight: 800, fontSize: size * 0.33,
+      color: bg, flexShrink: 0, letterSpacing: "0.02em",
+    }}>{initials(name)}</div>
+  );
+}
+
+function StatCard({ label, value, icon, color, sub }) {
+  return (
+    <div style={{ ...S.card, padding: "16px 20px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+        <div style={{ fontSize: 22, lineHeight: 1 }}>{icon}</div>
+        {sub && <span style={{ fontSize: 11, color: C.gray400, fontWeight: 600 }}>{sub}</span>}
+      </div>
+      <div style={{ fontSize: 22, fontWeight: 800, color, lineHeight: 1.1, marginBottom: 4 }}>{value}</div>
+      <div style={{ fontSize: 12, color: C.gray500, fontWeight: 600 }}>{label}</div>
+    </div>
+  );
+}
+
+function PageHeader({ title, children }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
+      <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: C.gray900, letterSpacing: "-0.02em" }}>{title}</h2>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>{children}</div>
+    </div>
+  );
+}
+
+function Tabs({ tabs, active, onChange }) {
+  return (
+    <div style={{ display: "flex", gap: 4, background: C.gray100, borderRadius: 10, padding: 4, marginBottom: 20, width: "fit-content" }}>
+      {tabs.map(t => (
+        <button key={t.key} onClick={() => onChange(t.key)}
+          style={{ ...S.btn(active === t.key ? C.white : "transparent", active === t.key ? C.gray800 : C.gray500), boxShadow: active === t.key ? "0 1px 4px rgba(0,0,0,.1)" : "none", fontSize: 12, padding: "7px 16px", borderRadius: 8 }}>
+          {t.icon && <span>{t.icon}</span>}{t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Modal({ title, onClose, children, width = 500 }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 24 }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ ...S.card, width, maxWidth: "100%", maxHeight: "90vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: C.gray900 }}>{title}</h3>
+          <button onClick={onClose} style={{ ...S.btnSm(C.gray100, C.gray600), borderRadius: "50%", width: 30, height: 30, padding: 0, justifyContent: "center" }}>✕</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children, style }) {
+  return (
+    <div style={{ marginBottom: 14, ...style }}>
+      <label style={S.label}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LOGIN
+// ═══════════════════════════════════════════════════════════════════════════
+function LoginScreen({ state, dispatch }) {
+  const { lang, setLang } = React.useContext(LangCtx);
+  const t = T[lang];
+  const [email, setEmail] = useState("");
+  const [pass, setPass]   = useState("");
+  const [error, setError] = useState("");
+
+  const login = () => {
+    const user = state.users.find(u => u.email === email && u.password === pass && u.active !== false);
+    if (user) { dispatch({ type: "LOGIN", user }); setError(""); }
+    else setError(t.login_error);
+  };
+
+  return (
+    <div style={{ ...S.page, display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg,#0F172A 0%,#1E293B 50%,#0F2D40 100%)" }}>
+      <div style={{ ...S.card, width: 400, textAlign: "center" }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+          {["en","es"].map(l => (
+            <button key={l} onClick={() => setLang(l)}
+              style={{ ...S.btnSm(lang === l ? C.orange : C.gray100, lang === l ? "#fff" : C.gray500), marginLeft: 4, fontSize: 11, fontWeight: 800 }}>
+              {l === "en" ? "🇺🇸 EN" : "🇩🇴 ES"}
+            </button>
+          ))}
+        </div>
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 32, fontWeight: 900, letterSpacing: "-0.04em", marginBottom: 4 }}>
+            <span style={{ color: C.orange }}>FRESH</span><span style={{ color: C.teal }}>SPIN</span>
+          </div>
+          <div style={{ fontSize: 12, color: C.gray400, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em" }}>{t.login_subtitle}</div>
+        </div>
+        <Field label={t.login_email}>
+          <input style={S.input} value={email} onChange={e => setEmail(e.target.value)} placeholder="your@email.com" type="email"
+            onKeyDown={e => e.key === "Enter" && login()} />
+        </Field>
+        <Field label={t.login_password}>
+          <input style={S.input} value={pass} onChange={e => setPass(e.target.value)} placeholder="••••••••" type="password"
+            onKeyDown={e => e.key === "Enter" && login()} />
+        </Field>
+        {error && <div style={{ color: C.red, fontSize: 12, marginBottom: 12, background: C.redL, padding: "8px 12px", borderRadius: 8 }}>{error}</div>}
+        <button style={{ ...S.btn(), width: "100%", justifyContent: "center", padding: "11px 0", fontSize: 14 }} onClick={login}>
+          {t.login_btn}
+        </button>
+        <div style={{ marginTop: 20, padding: "12px 14px", background: C.gray50, borderRadius: 8, fontSize: 11, color: C.gray400, textAlign: "left", lineHeight: 1.8 }}>
+          <b style={{ color: C.gray600 }}>{t.login_demo}</b><br />
+          owner@freshspin.com / owner123<br />
+          luisa@freshspin.com / mgr123 (manager)<br />
+          maria@freshspin.com / emp123 (employee)
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SIDEBAR
+// ═══════════════════════════════════════════════════════════════════════════
+function Sidebar({ active, setActive, user, dispatch }) {
+  const { lang, setLang } = React.useContext(LangCtx);
+  const t = T[lang];
+  const allowed = ROLE_ACCESS[user.role] || [];
+  const nav = [
+    { key: "dashboard", icon: "🏠", label: t.nav_dashboard },
+    { key: "pos",       icon: "🧾", label: t.nav_pos },
+    { key: "clients",   icon: "👥", label: t.nav_clients },
+    { key: "shifts",    icon: "📅", label: t.nav_shifts },
+    { key: "accounting",icon: "📊", label: t.nav_accounting },
+    { key: "hr",        icon: "👔", label: t.nav_hr },
+    { key: "employees", icon: "🏷", label: t.nav_employees },
+  ].filter(n => allowed.includes(n.key));
+
+  return (
+    <div id="sidebar" style={{ width: 220, background: C.gray900, minHeight: "100vh", display: "flex", flexDirection: "column", flexShrink: 0 }}>
+      <div style={{ padding: "22px 20px 16px", borderBottom: "1px solid rgba(255,255,255,.06)" }}>
+        <div style={{ fontSize: 20, fontWeight: 900, letterSpacing: "-0.03em" }}>
+          <span style={{ color: C.orange }}>FRESH</span><span style={{ color: C.teal }}>SPIN</span>
+        </div>
+        <div style={{ fontSize: 10, color: C.gray500, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginTop: 2 }}>Laundry CRM</div>
+      </div>
+      <div style={{ padding: "14px 16px", borderBottom: "1px solid rgba(255,255,255,.06)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Avatar name={user.name} role={user.role} size={34} />
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.white }}>{user.name.split(" ")[0]}</div>
+            <Badge type={user.role} />
+          </div>
+        </div>
+      </div>
+      <nav style={{ flex: 1, padding: "10px 0" }}>
+        {nav.map(n => {
+          const isActive = active === n.key;
+          return (
+            <button key={n.key} onClick={() => setActive(n.key)}
+              style={{ width: "100%", textAlign: "left", background: isActive ? `${C.orange}18` : "none", border: "none", borderLeft: isActive ? `3px solid ${C.orange}` : "3px solid transparent", color: isActive ? C.white : C.gray400, padding: "10px 18px 10px 17px", fontSize: 13, fontWeight: isActive ? 700 : 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 15 }}>{n.icon}</span>{n.label}
+            </button>
+          );
+        })}
+      </nav>
+      <div style={{ padding: "14px 16px", borderTop: "1px solid rgba(255,255,255,.06)" }}>
+        <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
+          {["en","es"].map(l => (
+            <button key={l} onClick={() => setLang(l)}
+              style={{ ...S.btnSm(lang === l ? C.orange : "rgba(255,255,255,.08)", lang === l ? "#fff" : C.gray400), flex: 1, justifyContent: "center", fontSize: 11, fontWeight: 800 }}>
+              {l === "en" ? "🇺🇸 EN" : "🇩🇴 ES"}
+            </button>
+          ))}
+        </div>
+        <button style={{ ...S.btnSm("transparent", C.gray500), fontSize: 12, width: "100%", justifyContent: "center" }}
+          onClick={() => dispatch({ type: "LOGOUT" })}>
+          {t.logout}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════════════════════════════════════
+function Dashboard({ state, setActive }) {
+  const { lang } = React.useContext(LangCtx);
+  const t = T[lang];
+  const role = state.currentUser.role;
+  const paidInvs = state.invoices.filter(i => i.status === "delivered");
+  const totalRevenue  = paidInvs.reduce((s, i) => s + i.total, 0);
+  const totalExpenses = state.expenses.reduce((s, e) => s + e.amount, 0);
+  const pending       = state.invoices.filter(i => i.status === "pending").length;
+  const myShifts = state.shifts.filter(s => s.employeeId === state.currentUser.id);
+  const upcoming  = myShifts.filter(s => s.status === "scheduled").length;
+  const completed = myShifts.filter(s => s.status === "completed").length;
+  const isPriv = role === "owner" || role === "manager";
+
+  return (
+    <div>
+      <div style={{ marginBottom: 22 }}>
+        <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: C.gray900, letterSpacing: "-0.02em" }}>
+          {t.welcome}, {state.currentUser.name.split(" ")[0]} 👋
+        </h2>
+        <p style={{ margin: "4px 0 0", fontSize: 13, color: C.gray500 }}>{new Date().toLocaleDateString(lang === "es" ? "es-DO" : "en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
+      </div>
+
+      {isPriv ? (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(170px,1fr))", gap: 14, marginBottom: 24 }}>
+            <StatCard label={t.total_revenue}  value={fmtCurrency(totalRevenue)}   icon="💰" color={C.green}    />
+            <StatCard label={t.total_expenses} value={fmtCurrency(totalExpenses)}  icon="📉" color={C.red}      />
+            <StatCard label={t.net_profit}     value={fmtCurrency(totalRevenue - totalExpenses)} icon="📈" color={totalRevenue - totalExpenses >= 0 ? C.orange : C.red} />
+            <StatCard label={t.active_clients} value={state.clients.length}        icon="👥" color={C.teal}     />
+            <StatCard label={t.invoices}       value={state.invoices.length}       icon="🧾" color={C.gray600}  />
+            <StatCard label={t.pending}        value={pending}                     icon="⏳" color={C.yellow}   />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div style={S.card}>
+              <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 800, color: C.gray800 }}>{t.recent_invoices}</h3>
+              <table style={S.table}>
+                <thead><tr>{["ID", t.client_col, t.total, t.status].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {[...state.invoices].reverse().slice(0,5).map(i => (
+                    <tr key={i.id}>
+                      <td style={S.td}><b style={{ color: C.orange, fontSize: 12 }}>{i.id}</b></td>
+                      <td style={S.td}>{i.clientName}</td>
+                      <td style={S.td}><b>{fmtCurrency(i.total)}</b></td>
+                      <td style={S.td}><Badge type={i.status} label={i.status === "delivered" ? t.delivered : t.pending} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div style={S.card}>
+              <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 800, color: C.gray800 }}>{t.latest_expenses}</h3>
+              <table style={S.table}>
+                <thead><tr>{[t.category, t.description, t.amount].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {[...state.expenses].reverse().slice(0,5).map(e => (
+                    <tr key={e.id}>
+                      <td style={S.td}><Badge type="pending" label={e.category} /></td>
+                      <td style={S.td}>{e.description}</td>
+                      <td style={{ ...S.td, color: C.red, fontWeight: 700 }}>{fmtCurrency(e.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 14 }}>
+          <StatCard label={t.my_upcoming}      value={upcoming}   icon="📅" color={C.teal}   />
+          <StatCard label={t.completed_shifts} value={completed}  icon="✅" color={C.green}  />
+          <StatCard label={t.invoices_created} value={state.invoices.filter(i => i.createdBy === state.currentUser.name).length} icon="🧾" color={C.orange} />
+          <StatCard label={t.active_clients}   value={state.clients.length} icon="👥" color={C.gray600} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SERVICE CATALOG
+// ═══════════════════════════════════════════════════════════════════════════
+const SERVICE_CATALOG = [
+  { name: "Wash & Fold (per lb)",                            nameEs: "Lavar & Doblar (por libra)",                          price: 100 },
+  { name: "Wash & Fold — White Clothes (per lb)",            nameEs: "Lavar & Doblar — Ropa Blanca (por libra)",            price: 120 },
+  { name: "Wash & Fold — Curtains/Blankets/Towels (per lb)", nameEs: "Lavar & Doblar — Cortinas/Frazadas/Toallas (por lb)", price: 150 },
+  { name: "Wash — Dress (per unit)",                         nameEs: "Lavar — Vestido (por unidad)",                        price: 250 },
+  { name: "Wash — Suit (per unit)",                          nameEs: "Lavar — Traje (por unidad)",                          price: 250 },
+  { name: "Iron & Press — Shirt (per unit)",                 nameEs: "Planchar — Camisa (por unidad)",                      price:  60 },
+  { name: "Iron & Press — Pants (per unit)",                 nameEs: "Planchar — Pantalón (por unidad)",                    price:  60 },
+  { name: "Iron & Press — Dress (per unit)",                 nameEs: "Planchar — Vestido (por unidad)",                     price: 300 },
+  { name: "Iron & Press — Suit (per unit)",                  nameEs: "Planchar — Traje (por unidad)",                       price: 300 },
+  { name: "Sneakers Cleaning",                               nameEs: "Limpieza de Tenis",                                   price: 350 },
+  { name: "Express",                                         nameEs: "Expreso",                                             price: 100 },
+  { name: "Delivery",                                        nameEs: "Entrega a Domicilio",                                 price: 150 },
+];
+
+// ═══════════════════════════════════════════════════════════════════════════
+// POS / INVOICES
+// ═══════════════════════════════════════════════════════════════════════════
+function POS({ state, dispatch, prefillClientId }) {
+  const { lang } = React.useContext(LangCtx);
+  const t = T[lang];
+  const svcLabel = s => lang === "es" ? (s.nameEs || s.name) : s.name;
+  const [view,           setView]           = useState(prefillClientId ? "new" : "list");
+  const [selectedClient, setSelectedClient] = useState(prefillClientId ? String(prefillClientId) : "");
+  const [clientSearch,   setClientSearch]   = useState("");
+  const [showDropdown,   setShowDropdown]   = useState(false);
+  const [lines,          setLines]          = useState([{ name: "", qty: 1, price: 0 }]);
+  const [invoiceNote,    setInvoiceNote]    = useState("");
+  const [printInv,       setPrintInv]       = useState(null);
+  const [filter,         setFilter]         = useState("all");
+  const [search,         setSearch]         = useState("");
+  const searchRef = useRef();
+
+  useEffect(() => {
+    if (prefillClientId) {
+      setSelectedClient(String(prefillClientId));
+      setView("new");
+    }
+  }, [prefillClientId]);
+
+  const addLine    = () => setLines(prev => [...prev, { name: "", qty: 1, price: 0 }]);
+  const removeLine = i  => setLines(prev => prev.filter((_, idx) => idx !== i));
+  const updateLine = (i, field, val) => setLines(prev => prev.map((l, idx) => idx === i ? { ...l, [field]: val } : l));
+  const applyService = (i, name) => {
+    const svc = SERVICE_CATALOG.find(s => s.name === name);
+    setLines(prev => prev.map((l, idx) => idx === i ? { ...l, name, price: svc?.price || 0 } : l));
+  };
+  const total = lines.reduce((s, l) => s + Number(l.qty) * Number(l.price), 0);
+
+  const clientMatches = clientSearch.trim().length > 0
+    ? state.clients.filter(c => {
+        const q = clientSearch.toLowerCase();
+        const qDigits = clientSearch.replace(/\D/g, "");
+        return c.name.toLowerCase().includes(q) ||
+          (qDigits.length >= 3 && c.phone.replace(/\D/g, "").includes(qDigits));
+      })
+    : [];
+
+  const selectClientFromSearch = (c) => {
+    setSelectedClient(String(c.id));
+    setClientSearch(c.name);
+    setShowDropdown(false);
+  };
+
+  const createInvoice = () => {
+    const client = state.clients.find(c => c.id === Number(selectedClient));
+    if (!client) return alert(t.alert_client);
+    if (lines.every(l => !l.name)) return alert(t.alert_service);
+    const inv = {
+      id: `INV-${uid()}`, clientId: client.id, clientName: client.name,
+      services: lines.filter(l => l.name), total,
+      date: today(), status: "pending",
+      createdBy: state.currentUser.name, notes: invoiceNote,
+    };
+    dispatch({ type: "ADD_INVOICE", invoice: inv });
+    setPrintInv(inv);
+    setView("print");
+    setLines([{ name: "", qty: 1, price: 0 }]);
+    setSelectedClient(""); setClientSearch(""); setInvoiceNote("");
+  };
+
+  const resetNew = () => {
+    setView("list"); setSelectedClient(""); setClientSearch(""); setInvoiceNote("");
+    setLines([{ name: "", qty: 1, price: 0 }]);
+  };
+
+  const displayed = [...state.invoices]
+    .filter(i => filter === "all" || i.status === filter)
+    .filter(i => !search || i.clientName.toLowerCase().includes(search.toLowerCase()) || i.id.toLowerCase().includes(search.toLowerCase()))
+    .reverse();
+
+  if (view === "print" && printInv) return (
+    <div>
+      <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+        <button style={S.btn(C.gray200, C.gray800)} onClick={() => setView("list")}>{t.back_to_invoices}</button>
+      </div>
+      <div style={{ ...S.card, maxWidth: 520 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, paddingBottom: 16, borderBottom: `1px solid ${C.gray100}` }}>
+          <div>
+            <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: "-0.03em" }}><span style={{ color: C.orange }}>FRESH</span><span style={{ color: C.teal }}>SPIN</span></div>
+            <div style={{ fontSize: 11, color: C.gray400, fontWeight: 600 }}>{lang === "es" ? "Lavandería & Tintorería" : "Dry & Laundry"}</div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 18, fontWeight: 800, color: C.gray800 }}>{lang === "es" ? "FACTURA" : "INVOICE"}</div>
+            <div style={{ fontSize: 13, color: C.orange, fontWeight: 700 }}>{printInv.id}</div>
+            <div style={{ fontSize: 12, color: C.gray400 }}>{lang === "es" ? "Fecha" : "Date"}: {printInv.date}</div>
+          </div>
+        </div>
+        <div style={{ marginBottom: 16, padding: "10px 14px", background: C.gray50, borderRadius: 8 }}>
+          <div style={{ fontSize: 11, color: C.gray500, fontWeight: 700, marginBottom: 2 }}>{t.billed_to}</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: C.gray800 }}>{printInv.clientName}</div>
+          {(() => { const c = state.clients.find(x => x.id === printInv.clientId); return c ? <div style={{ fontSize: 12, color: C.gray500 }}>{c.phone} · {c.address}</div> : null; })()}
+        </div>
+        <table style={{ ...S.table, marginBottom: 14 }}>
+          <thead><tr>{[
+            lang === "es" ? "Servicio" : "Service",
+            lang === "es" ? "Cant." : "Qty",
+            lang === "es" ? "Precio Unit." : "Unit Price",
+            "Total"
+          ].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
+          <tbody>
+            {printInv.services.map((s, i) => {
+              const catalogItem = SERVICE_CATALOG.find(c => c.name === s.name);
+              const displayName = lang === "es" && catalogItem ? (catalogItem.nameEs || s.name) : s.name;
+              return (
+                <tr key={i}>
+                  <td style={S.td}>{displayName}</td>
+                  <td style={S.td}>{s.qty}</td>
+                  <td style={S.td}>{fmtCurrency(s.price)}</td>
+                  <td style={{ ...S.td, fontWeight: 700 }}>{fmtCurrency(s.qty * s.price)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div style={{ textAlign: "right", fontSize: 20, fontWeight: 900, color: C.orange, marginBottom: 8 }}>Total: {fmtCurrency(printInv.total)}</div>
+        {printInv.notes && <div style={{ fontSize: 12, color: C.gray500, marginBottom: 12 }}>{lang === "es" ? "Nota" : "Note"}: {printInv.notes}</div>}
+        <div style={{ fontSize: 11, color: C.gray400, textAlign: "center", marginBottom: 16 }}>
+          {lang === "es" ? "¡Gracias por elegir FreshSpin! · Thank you!" : "Thank you for choosing FreshSpin · ¡Gracias!"}
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button style={{ ...S.btn(printInv.status === "delivered" ? C.yellow : C.green), flex: 1, justifyContent: "center" }}
+            onClick={() => {
+              const next = printInv.status === "delivered" ? "pending" : "delivered";
+              dispatch({ type: "UPDATE_INVOICE_STATUS", id: printInv.id, status: next });
+              setPrintInv(p => ({ ...p, status: next }));
+            }}>
+            {printInv.status === "delivered" ? t.mark_pending : t.mark_delivered}
+          </button>
+          <button style={{ ...S.btn(C.teal), flex: 1, justifyContent: "center" }} onClick={() => window.print()}>{t.print}</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (view === "new") return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 22 }}>
+        <button style={S.btn(C.gray200, C.gray800)} onClick={resetNew}>{t.back}</button>
+        <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: C.gray900 }}>{t.new_invoice_title}</h2>
+      </div>
+      <div style={{ ...S.card, maxWidth: 640 }}>
+        <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: `1px solid ${C.gray100}` }}>
+          <label style={S.label}>{t.client_search_lbl}</label>
+          <div style={{ position: "relative" }}>
+            <input
+              ref={searchRef}
+              style={{ ...S.input, paddingRight: selectedClient ? 36 : 13 }}
+              value={clientSearch}
+              onChange={e => { setClientSearch(e.target.value); setShowDropdown(true); setSelectedClient(""); }}
+              onFocus={() => setShowDropdown(true)}
+              placeholder={t.client_search_ph}
+            />
+            {selectedClient && (
+              <button onClick={() => { setSelectedClient(""); setClientSearch(""); }}
+                style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: C.gray400, fontSize: 16, lineHeight: 1 }}>✕</button>
+            )}
+            {showDropdown && clientMatches.length > 0 && (
+              <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, background: C.white, border: `1.5px solid ${C.gray200}`, borderRadius: 10, boxShadow: "0 4px 16px rgba(0,0,0,.1)", zIndex: 100, maxHeight: 200, overflowY: "auto" }}>
+                {clientMatches.map(c => {
+                  const qDigits = clientSearch.replace(/\D/g, "");
+                  const phoneMatch = qDigits.length >= 3 && c.phone.replace(/\D/g, "").includes(qDigits) && !c.name.toLowerCase().includes(clientSearch.toLowerCase());
+                  return (
+                    <button key={c.id} onClick={() => selectClientFromSearch(c)}
+                      style={{ width: "100%", textAlign: "left", background: "none", border: "none", padding: "10px 14px", cursor: "pointer", fontSize: 13, display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: `1px solid ${C.gray100}` }}>
+                      <div>
+                        <span style={{ fontWeight: 700, color: C.gray800 }}>{c.name}</span>
+                        <span style={{ fontWeight: phoneMatch ? 700 : 400, color: phoneMatch ? C.teal : C.gray400, marginLeft: 8 }}>📱 {c.phone}</span>
+                      </div>
+                      <span style={{ ...S.badge(C.orangeL, C.orangeD), fontSize: 10 }}>{c.loyalty} pts</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          {!selectedClient && clientSearch.trim() === "" && (
+            <div style={{ marginTop: 10 }}>
+              <label style={{ ...S.label, marginBottom: 8 }}>{t.or_select_list}</label>
+              <select style={S.input} value={selectedClient} onChange={e => {
+                setSelectedClient(e.target.value);
+                const c = state.clients.find(x => x.id === Number(e.target.value));
+                if (c) setClientSearch(c.name);
+              }}>
+                <option value="">{t.select_client}</option>
+                {state.clients.map(c => <option key={c.id} value={c.id}>{c.name} — {c.phone}</option>)}
+              </select>
+            </div>
+          )}
+          {selectedClient && (() => {
+            const c = state.clients.find(x => x.id === Number(selectedClient));
+            return c ? (
+              <div style={{ marginTop: 10, padding: "10px 14px", background: C.tealL, borderRadius: 9, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <span style={{ fontWeight: 700, color: C.tealD }}>{c.name}</span>
+                  <span style={{ color: C.teal, marginLeft: 10, fontSize: 12 }}>{c.phone}</span>
+                </div>
+                <span style={{ ...S.badge(C.orangeL, C.orangeD) }}>{c.loyalty} pts</span>
+              </div>
+            ) : null;
+          })()}
+        </div>
+
+        <div style={{ marginBottom: 18 }}>
+          <label style={S.label}>{t.services}</label>
+          {lines.map((line, i) => (
+            <div key={i} style={{ display: "grid", gridTemplateColumns: "2fr .55fr .8fr auto", gap: 8, marginBottom: 8, alignItems: "center" }}>
+              <select style={S.input} value={line.name} onChange={e => applyService(i, e.target.value)}>
+                <option value="">{lang === "es" ? "— Servicio —" : "— Service —"}</option>
+                {SERVICE_CATALOG.map(s => <option key={s.name} value={s.name}>{svcLabel(s)} ({fmtCurrency(s.price)})</option>)}
+              </select>
+              <input type="number" style={S.input} value={line.qty} min={1} onChange={e => updateLine(i, "qty", e.target.value)} placeholder={t.qty} />
+              <input type="number" style={S.input} value={line.price} onChange={e => updateLine(i, "price", e.target.value)} placeholder={lang === "es" ? "Precio" : "Price"} />
+              <button style={S.btnSm(C.redL, C.red)} onClick={() => removeLine(i)}>✕</button>
+            </div>
+          ))}
+          <button style={{ ...S.btn(C.gray100, C.gray700), fontSize: 12, marginTop: 4 }} onClick={addLine}>{t.add_line}</button>
+        </div>
+
+        <Field label={t.note_optional}>
+          <input style={S.input} value={invoiceNote} onChange={e => setInvoiceNote(e.target.value)} placeholder={t.internal_note} />
+        </Field>
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16, paddingTop: 16, borderTop: `1px solid ${C.gray100}` }}>
+          <div style={{ fontSize: 22, fontWeight: 900, color: C.orange }}>Total: {fmtCurrency(total)}</div>
+          <button style={{ ...S.btn(), padding: "11px 24px" }} onClick={createInvoice}>{t.generate_invoice}</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div>
+      <PageHeader title={t.pos_title}>
+        <input style={{ ...S.input, width: 220 }} value={search} onChange={e => setSearch(e.target.value)} placeholder={t.search_invoice} />
+        <button style={S.btn()} onClick={() => setView("new")}>{t.new_invoice}</button>
+      </PageHeader>
+      <Tabs
+        tabs={[{key:"all",label:t.all},{key:"pending",icon:"⏳",label:t.pending},{key:"delivered",icon:"✅",label:t.delivered}]}
+        active={filter} onChange={setFilter}
+      />
+      <div style={S.card}>
+        <table style={S.table}>
+          <thead><tr>{[t.invoice_num, t.client_col, t.services, t.total, t.date, t.created_by, t.status, t.actions].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
+          <tbody>
+            {displayed.length === 0 && (
+              <tr><td colSpan={8} style={{ ...S.td, textAlign: "center", color: C.gray400, padding: 32 }}>{t.no_invoices}</td></tr>
+            )}
+            {displayed.map(inv => (
+              <tr key={inv.id}>
+                <td style={S.td}><b style={{ color: C.orange }}>{inv.id}</b></td>
+                <td style={S.td}><b>{inv.clientName}</b></td>
+                <td style={{ ...S.td, maxWidth: 180 }}><span style={{ color: C.gray500 }}>{inv.services.map(s => {
+                  const ci = SERVICE_CATALOG.find(c => c.name === s.name);
+                  return lang === "es" && ci ? (ci.nameEs || s.name) : s.name;
+                }).join(", ")}</span></td>
+                <td style={{ ...S.td, fontWeight: 700 }}>{fmtCurrency(inv.total)}</td>
+                <td style={S.td}>{inv.date}</td>
+                <td style={{ ...S.td, fontSize: 12, color: C.gray500 }}>{inv.createdBy}</td>
+                <td style={S.td}><Badge type={inv.status} label={inv.status === "delivered" ? t.delivered : t.pending} /></td>
+                <td style={S.td}>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button style={S.btnSm(C.tealL, C.teal)} onClick={() => { setPrintInv(inv); setView("print"); }}>{t.view}</button>
+                    <button
+                      style={S.btnSm(inv.status === "delivered" ? C.greenL : C.yellowL, inv.status === "delivered" ? C.green : C.yellow)}
+                      onClick={() => dispatch({ type: "UPDATE_INVOICE_STATUS", id: inv.id, status: inv.status === "delivered" ? "pending" : "delivered" })}>
+                      {inv.status === "delivered" ? `✓ ${t.delivered}` : `⏳ ${t.pending}`}
+                    </button>
+                    {(state.currentUser.role === "owner" || state.currentUser.role === "manager") && (
+                      <button style={S.btnSm(C.redL, C.red)}
+                        onClick={() => { if (confirm(t.confirm_del_invoice)) dispatch({ type: "DELETE_INVOICE", id: inv.id }); }}>{t.del}</button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SUBSCRIPTION PLANS
+// ═══════════════════════════════════════════════════════════════════════════
+const SUB_PLANS = [
+  { id: "monthly",   label: "Monthly",   labelEs: "Mensual",    days: 30  },
+  { id: "quarterly", label: "Quarterly", labelEs: "Trimestral", days: 90  },
+  { id: "biannual",  label: "Bi-Annual", labelEs: "Semestral",  days: 180 },
+  { id: "annual",    label: "Annual",    labelEs: "Anual",      days: 365 },
+];
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CLIENTS
+// ═══════════════════════════════════════════════════════════════════════════
+function Clients({ state, dispatch, onNewInvoice }) {
+  const { lang } = React.useContext(LangCtx);
+  const t = T[lang];
+  const [mainTab,  setMainTab]  = useState("clients");
+  const [view,     setView]     = useState("list");
+  const [form,     setForm]     = useState({ name: "", phone: "", email: "", address: "", notes: "" });
+  const [editing,  setEditing]  = useState(null);
+  const [search,   setSearch]   = useState("");
+  const [detail,   setDetail]   = useState(null);
+  const [subModal, setSubModal] = useState(null);
+  const [subForm,  setSubForm]  = useState({ plan: "monthly", amount: "", startDate: today() });
+
+  const subs = state.subscriptions || [];
+
+  const filtered = state.clients.filter(c =>
+    c.name.toLowerCase().includes(search.toLowerCase()) ||
+    c.phone.includes(search) || c.email.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const save = () => {
+    if (!form.name || !form.phone) return alert(t.alert_name_phone);
+    if (editing) {
+      dispatch({ type: "UPDATE_CLIENT", client: { ...editing, ...form } });
+    } else {
+      dispatch({ type: "ADD_CLIENT", client: { ...form, id: Date.now(), joinDate: today(), loyalty: 0 } });
+    }
+    setView("list"); setForm({ name: "", phone: "", email: "", address: "", notes: "" }); setEditing(null);
+  };
+
+  const startEdit = c => { setEditing(c); setForm({ name: c.name, phone: c.phone, email: c.email, address: c.address, notes: c.notes || "" }); setView("form"); };
+  const clientInvoices = id => state.invoices.filter(i => i.clientId === id);
+  const planLabel = p => lang === "es" ? (p.labelEs || p.label) : p.label;
+
+  /* ── Subscription helpers ── */
+  const effectiveStatus = sub => {
+    if (sub.status === "cancelled") return "cancelled";
+    if (sub.status === "on_hold")   return "on_hold";
+    if (sub.expirationDate < today()) return "expired";
+    return "active";
+  };
+  const daysLeft = sub => Math.ceil((new Date(sub.expirationDate) - new Date(today())) / 86400000);
+  const clientSub = id => subs.filter(s => s.clientId === id && s.status !== "cancelled").sort((a,b) => b.id - a.id)[0];
+
+  const SUB_BADGE = {
+    active:    [C.greenL,  C.green],
+    on_hold:   [C.yellowL, C.yellow],
+    expired:   [C.redL,    C.red],
+    cancelled: [C.gray200, C.gray500],
+  };
+  const statusLabel = st => ({ active: t.active_sub, on_hold: t.on_hold_sub, expired: t.expired_sub, cancelled: t.cancelled_sub }[st] || st);
+
+  const addSubscription = () => {
+    if (!subForm.amount) return alert(t.alert_fill);
+    const plan  = SUB_PLANS.find(p => p.id === subForm.plan);
+    const start = subForm.startDate || today();
+    const expiry = new Date(start);
+    expiry.setDate(expiry.getDate() + plan.days);
+    const client = state.clients.find(c => c.id === subModal);
+    dispatch({
+      type: "ADD_SUBSCRIPTION",
+      sub: { id: Date.now(), clientId: subModal, clientName: client.name, plan: subForm.plan,
+             amount: Number(subForm.amount), startDate: start,
+             expirationDate: expiry.toISOString().split("T")[0],
+             status: "active", createdBy: state.currentUser.name },
+    });
+    setSubModal(null);
+    setSubForm({ plan: "monthly", amount: "", startDate: today() });
+  };
+
+  const renewSub = sub => {
+    const plan  = SUB_PLANS.find(p => p.id === sub.plan);
+    const start = today();
+    const expiry = new Date(start);
+    expiry.setDate(expiry.getDate() + plan.days);
+    dispatch({ type: "UPDATE_SUBSCRIPTION", sub: { ...sub, startDate: start, expirationDate: expiry.toISOString().split("T")[0], status: "active" } });
+  };
+
+  /* ── Form view ── */
+  if (view === "form") return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 22 }}>
+        <button style={S.btn(C.gray200, C.gray800)} onClick={() => { setView("list"); setEditing(null); }}>{t.back}</button>
+        <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>{editing ? t.edit_client : t.new_client_title}</h2>
+      </div>
+      <div style={{ ...S.card, maxWidth: 500 }}>
+        {[[t.full_name,"name","text"],[t.phone,"phone","tel"],[t.email,"email","email"],[t.address,"address","text"]].map(([label, field, type]) => (
+          <Field key={field} label={label}>
+            <input style={S.input} type={type} value={form[field]} onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))} placeholder={label} />
+          </Field>
+        ))}
+        <Field label={t.internal_notes}>
+          <input style={S.input} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder={t.notes_ph} />
+        </Field>
+        <button style={{ ...S.btn(), width: "100%", justifyContent: "center", padding: "11px 0" }} onClick={save}>
+          {editing ? t.update_client : t.register_client}
+        </button>
+      </div>
+    </div>
+  );
+
+  /* ── Main view ── */
+  return (
+    <div>
+      <PageHeader title={t.clients_title}>
+        <input style={{ ...S.input, width: 240 }} value={search} onChange={e => setSearch(e.target.value)} placeholder={t.search_clients} />
+        {mainTab === "clients" && (
+          <button style={S.btn()} onClick={() => { setForm({ name:"",phone:"",email:"",address:"",notes:"" }); setEditing(null); setView("form"); }}>{t.new_client}</button>
+        )}
+      </PageHeader>
+
+      <Tabs
+        tabs={[{ key:"clients", label: t.tab_clients_list }, { key:"subscriptions", label: "🔄 " + t.subscriptions }]}
+        active={mainTab} onChange={setMainTab}
+      />
+
+      {/* ── Client list ── */}
+      {mainTab === "clients" && (
+        <div style={S.card}>
+          <table style={S.table}>
+            <thead>
+              <tr>{[t.client_col,t.phone,t.email,t.joined,t.loyalty,t.subscriptions,t.actions].map(h => <th key={h} style={S.th}>{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 && (
+                <tr><td colSpan={7} style={{ ...S.td, textAlign:"center", color:C.gray400, padding:32 }}>{t.no_clients}</td></tr>
+              )}
+              {filtered.map(c => {
+                const sub = clientSub(c.id);
+                const es  = sub ? effectiveStatus(sub) : null;
+                const [sbg, sfg] = es ? (SUB_BADGE[es] || [C.gray200,C.gray500]) : [];
+                return (
+                  <tr key={c.id}>
+                    <td style={S.td}>
+                      <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                        <Avatar name={c.name} role="employee" size={30} />
+                        <div>
+                          <button onClick={() => onNewInvoice(c.id)}
+                            style={{ background:"none", border:"none", cursor:"pointer", fontWeight:700, color:C.gray800, fontSize:13, padding:0, textDecoration:"underline", textDecorationColor:C.orange, textUnderlineOffset:3 }}>
+                            {c.name}
+                          </button>
+                          {c.notes && <div style={{ fontSize:11, color:C.gray400, marginTop:1 }}>{c.notes}</div>}
+                        </div>
+                      </div>
+                    </td>
+                    <td style={S.td}>{c.phone}</td>
+                    <td style={{ ...S.td, fontSize:12, color:C.gray500 }}>{c.email}</td>
+                    <td style={{ ...S.td, fontSize:12 }}>{c.joinDate}</td>
+                    <td style={S.td}><span style={S.badge(C.orangeL, C.orangeD)}>{c.loyalty} pts</span></td>
+                    <td style={S.td}>
+                      {sub
+                        ? <span style={S.badge(sbg, sfg)}>{statusLabel(es)}</span>
+                        : <span style={{ fontSize:11, color:C.gray300 }}>—</span>
+                      }
+                    </td>
+                    <td style={S.td}>
+                      <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
+                        <button style={S.btnSm(C.orange)}          onClick={() => onNewInvoice(c.id)}>{t.invoice_btn}</button>
+                        <button style={S.btnSm(C.tealL, C.teal)}   onClick={() => setDetail(c)}>{t.history}</button>
+                        <button style={S.btnSm(C.gray100,C.gray600)} onClick={() => startEdit(c)}>{t.edit}</button>
+                        <button style={S.btnSm(C.purpleL,C.purple)} onClick={() => { setSubModal(c.id); setSubForm({ plan:"monthly", amount:"", startDate:today() }); }}>{t.subscribe}</button>
+                        <button style={S.btnSm(C.redL, C.red)}     onClick={() => { if (confirm(t.confirm_del_client)) dispatch({ type:"DELETE_CLIENT", id:c.id }); }}>{t.del}</button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ── Subscriptions tab ── */}
+      {mainTab === "subscriptions" && (
+        <div style={S.card}>
+          {subs.length === 0 ? (
+            <div style={{ textAlign:"center", color:C.gray400, padding:48 }}>
+              <div style={{ fontSize:40, marginBottom:12 }}>🔄</div>
+              <div style={{ fontWeight:700, fontSize:15 }}>{t.no_subscriptions}</div>
+            </div>
+          ) : (
+            <table style={S.table}>
+              <thead>
+                <tr>{[t.client_col,t.sub_plan,t.amount,t.start_date,t.expiration,t.days_left,t.status,t.actions].map(h => <th key={h} style={S.th}>{h}</th>)}</tr>
+              </thead>
+              <tbody>
+                {[...subs].sort((a,b) => b.id - a.id).map(sub => {
+                  const es  = effectiveStatus(sub);
+                  const dl  = daysLeft(sub);
+                  const [sbg, sfg] = SUB_BADGE[es] || [C.gray200,C.gray500];
+                  const plan = SUB_PLANS.find(p => p.id === sub.plan);
+                  const dlColor = dl > 7 ? C.green : dl > 0 ? C.yellow : C.red;
+                  return (
+                    <tr key={sub.id}>
+                      <td style={S.td}><b>{sub.clientName}</b></td>
+                      <td style={S.td}>{plan ? planLabel(plan) : sub.plan}</td>
+                      <td style={{ ...S.td, fontWeight:700, color:C.green }}>{fmtCurrency(sub.amount)}</td>
+                      <td style={{ ...S.td, fontSize:12 }}>{sub.startDate}</td>
+                      <td style={{ ...S.td, fontSize:12, fontWeight:700 }}>{sub.expirationDate}</td>
+                      <td style={S.td}>
+                        {es === "cancelled" || es === "on_hold"
+                          ? <span style={{ color:C.gray400 }}>—</span>
+                          : <span style={{ fontWeight:700, color:dlColor }}>{dl > 0 ? `${dl}d` : "0d"}</span>
+                        }
+                      </td>
+                      <td style={S.td}><span style={S.badge(sbg,sfg)}>{statusLabel(es)}</span></td>
+                      <td style={S.td}>
+                        <div style={{ display:"flex", gap:5 }}>
+                          {es !== "cancelled" && (
+                            <button style={S.btnSm(C.greenL,C.green)} onClick={() => renewSub(sub)}>{t.renew}</button>
+                          )}
+                          {es === "active" && (
+                            <button style={S.btnSm(C.yellowL,C.yellow)} onClick={() => dispatch({ type:"UPDATE_SUBSCRIPTION", sub:{ ...sub, status:"on_hold" } })}>{t.hold_sub}</button>
+                          )}
+                          {es === "on_hold" && (
+                            <button style={S.btnSm(C.tealL,C.teal)} onClick={() => dispatch({ type:"UPDATE_SUBSCRIPTION", sub:{ ...sub, status:"active" } })}>{t.resume_sub}</button>
+                          )}
+                          {es !== "cancelled" && (
+                            <button style={S.btnSm(C.redL,C.red)} onClick={() => { if (confirm(t.confirm_cancel_sub)) dispatch({ type:"UPDATE_SUBSCRIPTION", sub:{ ...sub, status:"cancelled" } }); }}>{t.cancel_sub}</button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* ── Invoice history modal ── */}
+      {detail && (
+        <Modal title={`${detail.name} — ${t.invoice_history}`} onClose={() => setDetail(null)} width={580}>
+          <div style={{ marginBottom:16, padding:"10px 14px", background:C.gray50, borderRadius:9 }}>
+            <div style={{ fontSize:12, color:C.gray500 }}>{detail.phone} · {detail.email}</div>
+            <div style={{ fontSize:12, color:C.gray500 }}>{detail.address}</div>
+            {detail.notes && <div style={{ fontSize:12, color:C.orange, marginTop:4 }}>📌 {detail.notes}</div>}
+          </div>
+          <table style={S.table}>
+            <thead><tr>{["ID",t.services,t.total,t.date,t.status].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
+            <tbody>
+              {clientInvoices(detail.id).length === 0 && (
+                <tr><td colSpan={5} style={{ ...S.td, textAlign:"center", color:C.gray400 }}>{t.no_invoices_yet}</td></tr>
+              )}
+              {clientInvoices(detail.id).map(i => (
+                <tr key={i.id}>
+                  <td style={S.td}><b style={{ color:C.orange, fontSize:12 }}>{i.id}</b></td>
+                  <td style={{ ...S.td, fontSize:12, color:C.gray500 }}>{i.services.map(s => s.name).join(", ")}</td>
+                  <td style={{ ...S.td, fontWeight:700 }}>{fmtCurrency(i.total)}</td>
+                  <td style={S.td}>{i.date}</td>
+                  <td style={S.td}><Badge type={i.status} label={i.status === "delivered" ? t.delivered : t.pending} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ marginTop:14 }}>
+            <button style={{ ...S.btn(), width:"100%" }} onClick={() => { setDetail(null); onNewInvoice(detail.id); }}>
+              {t.create_invoice_for} {detail.name}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── New subscription modal ── */}
+      {subModal && (() => {
+        const client = state.clients.find(c => c.id === subModal);
+        const plan   = SUB_PLANS.find(p => p.id === subForm.plan);
+        const previewExp = subForm.startDate && plan ? (() => { const d = new Date(subForm.startDate); d.setDate(d.getDate() + plan.days); return d.toISOString().split("T")[0]; })() : null;
+        return (
+          <Modal title={`${t.new_subscription} — ${client?.name}`} onClose={() => setSubModal(null)} width={430}>
+            <Field label={t.sub_plan}>
+              <select style={S.input} value={subForm.plan} onChange={e => setSubForm(f => ({ ...f, plan:e.target.value }))}>
+                {SUB_PLANS.map(p => <option key={p.id} value={p.id}>{planLabel(p)} — {p.days} {t.sub_days}</option>)}
+              </select>
+            </Field>
+            <Field label={t.sub_amount}>
+              <input style={S.input} type="number" value={subForm.amount} onChange={e => setSubForm(f => ({ ...f, amount:e.target.value }))} placeholder="RD$0" />
+            </Field>
+            <Field label={t.start_date}>
+              <input style={S.input} type="date" value={subForm.startDate} onChange={e => setSubForm(f => ({ ...f, startDate:e.target.value }))} />
+            </Field>
+            {previewExp && (
+              <div style={{ background:C.purpleL, borderRadius:9, padding:"10px 14px", marginBottom:14, fontSize:12, color:C.purple, fontWeight:700 }}>
+                📅 {t.expiration}: <b>{previewExp}</b> &nbsp;·&nbsp; {plan.days} {t.sub_days}
+              </div>
+            )}
+            <button style={{ ...S.btn(C.purple), width:"100%", justifyContent:"center", padding:"11px 0" }} onClick={addSubscription}>
+              {t.save_subscription}
+            </button>
+          </Modal>
+        );
+      })()}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MY SHIFTS
+// ═══════════════════════════════════════════════════════════════════════════
+function MyShifts({ state, dispatch }) {
+  const { lang } = React.useContext(LangCtx);
+  const t = T[lang];
+  const user = state.currentUser;
+  const myShifts = [...state.shifts]
+    .filter(s => s.employeeId === user.id)
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  return (
+    <div>
+      <PageHeader title={t.shifts_title} />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(160px,1fr))", gap: 12, marginBottom: 22 }}>
+        <StatCard label={t.total_shifts}  value={myShifts.length}                                icon="📅" color={C.teal} />
+        <StatCard label={t.upcoming}      value={myShifts.filter(s => s.status === "scheduled").length} icon="🕐" color={C.yellow} />
+        <StatCard label={t.completed}     value={myShifts.filter(s => s.status === "completed").length} icon="✅" color={C.green} />
+        <StatCard label={t.total_hours}   value={`${myShifts.filter(s => s.status === "completed").reduce((s, sh) => s + sh.hours, 0)}h`} icon="⏱" color={C.orange} />
+      </div>
+      <div style={S.card}>
+        <table style={S.table}>
+          <thead><tr>{[t.date,t.start,t.end,t.hours,t.status].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
+          <tbody>
+            {myShifts.length === 0 && <tr><td colSpan={5} style={{ ...S.td, textAlign: "center", color: C.gray400, padding: 32 }}>{t.no_shifts}</td></tr>}
+            {myShifts.map(s => (
+              <tr key={s.id}>
+                <td style={{ ...S.td, fontWeight: 700 }}>{s.date}</td>
+                <td style={S.td}>{s.start}</td>
+                <td style={S.td}>{s.end}</td>
+                <td style={{ ...S.td, fontWeight: 700, color: C.orange }}>{s.hours}h</td>
+                <td style={S.td}><Badge type={s.status} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ACCOUNTING
+// ═══════════════════════════════════════════════════════════════════════════
+const EXP_CATS = ["Utilities","Supplies","Maintenance","Salaries","Rent","Marketing","Insurance","Equipment","Other"];
+
+function Accounting({ state, dispatch }) {
+  const { lang } = React.useContext(LangCtx);
+  const t = T[lang];
+  const [tab, setTab]         = useState("overview");
+  const [expForm, setExpForm] = useState({ category: "Utilities", description: "", amount: "", date: today() });
+  const [showForm, setShowForm] = useState(false);
+  const [proofFile, setProofFile] = useState(null);
+  const [proofViewer, setProofViewer] = useState(null);
+
+  const paidInvs  = state.invoices.filter(i => i.status === "delivered");
+  const revenue   = paidInvs.reduce((s, i) => s + i.total, 0);
+  const expenses  = state.expenses.reduce((s, e) => s + e.amount, 0);
+  const profit    = revenue - expenses;
+
+  const months = {};
+  paidInvs.forEach(i  => { const m = i.date.slice(0,7); if (!months[m]) months[m] = { rev: 0, exp: 0 }; months[m].rev += i.total; });
+  state.expenses.forEach(e => { const m = e.date.slice(0,7); if (!months[m]) months[m] = { rev: 0, exp: 0 }; months[m].exp += e.amount; });
+
+  const allMonths = Object.keys(months).sort();
+  const expByCatMonth = {};
+  state.expenses.forEach(e => {
+    const m = e.date.slice(0,7);
+    if (!expByCatMonth[e.category]) expByCatMonth[e.category] = {};
+    expByCatMonth[e.category][m] = (expByCatMonth[e.category][m] || 0) + e.amount;
+  });
+  const expCategories = Object.keys(expByCatMonth);
+  const fmtMonth = m => { const [yr, mo] = m.split("-"); return new Date(+yr, +mo-1).toLocaleString(lang === "es" ? "es-DO" : "en-US", { month: "short", year: "2-digit" }); };
+
+  const handleProof = ev => {
+    const file = ev.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => setProofFile({ name: file.name, type: file.type, data: e.target.result });
+    reader.readAsDataURL(file);
+  };
+
+  const addExpense = () => {
+    if (!expForm.description || !expForm.amount) return alert(t.alert_fill);
+    dispatch({ type: "ADD_EXPENSE", expense: { ...expForm, id: Date.now(), amount: Number(expForm.amount), createdBy: state.currentUser.name, proof: proofFile || null } });
+    setExpForm({ category: "Utilities", description: "", amount: "", date: today() });
+    setProofFile(null);
+    setShowForm(false);
+  };
+
+  const canAddExpense = state.currentUser.role === "owner" || state.currentUser.role === "manager";
+
+  const downloadExcel = () => {
+    const wb = XLSX.utils.book_new();
+    // P&L Summary
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+      ["FRESHSPIN DRY & LAUNDRY – PROFIT & LOSS SUMMARY"],
+      [`Report generated: ${today()}`],
+      [],
+      ["Line Item", ...allMonths.map(fmtMonth), "Annual Total"],
+      ["TOTAL REVENUE",         ...allMonths.map(m => months[m]?.rev || 0), revenue],
+      ["TOTAL EXPENSES",        ...allMonths.map(m => months[m]?.exp || 0), expenses],
+      ["GROSS PROFIT / (LOSS)", ...allMonths.map(m => (months[m]?.rev||0)-(months[m]?.exp||0)), profit],
+      ["Net Profit Margin %",   ...allMonths.map(m => months[m]?.rev > 0 ? +((months[m].rev-months[m].exp)/months[m].rev).toFixed(4) : 0), revenue > 0 ? +(profit/revenue).toFixed(4) : 0],
+    ]), "P&L Summary");
+    // Monthly Expenses
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+      ["FRESHSPIN DRY & LAUNDRY – MONTHLY EXPENSE TRACKER"],
+      [`Report generated: ${today()}`],
+      [],
+      ["Expense Category", ...allMonths.map(fmtMonth), "Annual Total"],
+      ...expCategories.map(cat => [cat, ...allMonths.map(m => expByCatMonth[cat]?.[m] || 0), Object.values(expByCatMonth[cat]).reduce((s,v)=>s+v,0)]),
+      [],
+      ["TOTAL MONTHLY EXPENSES", ...allMonths.map(m => months[m]?.exp || 0), expenses],
+    ]), "Monthly Expenses");
+    // Income Detail
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+      ["FRESHSPIN DRY & LAUNDRY – INCOME DETAIL"],
+      [`Report generated: ${today()}`],
+      [],
+      ["Invoice #", "Client", "Services", "Amount (RD$)", "Date", "Created By"],
+      ...paidInvs.map(i => [i.id, i.clientName, i.services.map(s=>s.name).join(", "), i.total, i.date, i.createdBy]),
+      [],
+      ["TOTAL", "", "", revenue, "", ""],
+    ]), "Income Detail");
+    XLSX.writeFile(wb, `FreshSpin_Report_${today()}.xlsx`);
+  };
+
+  return (
+    <div>
+      <PageHeader title={t.accounting_title}>
+        {canAddExpense && <>
+          <button style={S.btn(C.tealL, C.tealD)} onClick={downloadExcel}>{t.excel_report}</button>
+          <button style={S.btn()} onClick={() => setShowForm(true)}>{t.record_expense}</button>
+        </>}
+      </PageHeader>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 22 }}>
+        <StatCard label={t.total_revenue}  value={fmtCurrency(revenue)}  icon="💰" color={C.green} />
+        <StatCard label={t.total_expenses} value={fmtCurrency(expenses)} icon="📉" color={C.red} />
+        <StatCard label={t.net_profit}     value={fmtCurrency(profit)}   icon="📈" color={profit >= 0 ? C.orange : C.red} />
+      </div>
+
+      <Tabs
+        tabs={[{key:"overview",label:t.tab_monthly},{key:"income",label:t.tab_income},{key:"expenses",label:t.tab_expenses},{key:"report",label:t.tab_report}]}
+        active={tab} onChange={setTab}
+      />
+
+      {tab === "overview" && (
+        <div style={S.card}>
+          <table style={S.table}>
+            <thead><tr>{[t.month,t.revenue,t.expenses_col,t.net_profit,t.margin].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
+            <tbody>
+              {Object.entries(months).sort((a,b) => b[0].localeCompare(a[0])).map(([m, d]) => {
+                const p = d.rev - d.exp;
+                return (
+                  <tr key={m}>
+                    <td style={{ ...S.td, fontWeight: 700 }}>{m}</td>
+                    <td style={{ ...S.td, color: C.green,  fontWeight: 700 }}>{fmtCurrency(d.rev)}</td>
+                    <td style={{ ...S.td, color: C.red,    fontWeight: 700 }}>{fmtCurrency(d.exp)}</td>
+                    <td style={{ ...S.td, color: p >= 0 ? C.green : C.red, fontWeight: 700 }}>{fmtCurrency(p)}</td>
+                    <td style={S.td}><Badge type={d.rev > 0 ? "active" : "inactive"} label={d.rev > 0 ? ((d.rev - d.exp)/d.rev*100).toFixed(1)+"%" : "—"} /></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {tab === "income" && (
+        <div style={S.card}>
+          <table style={S.table}>
+            <thead><tr>{[t.invoice_num,t.client_col,t.services,t.amount,t.date,t.created_by].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
+            <tbody>
+              {paidInvs.map(i => (
+                <tr key={i.id}>
+                  <td style={S.td}><b style={{ color: C.orange, fontSize: 12 }}>{i.id}</b></td>
+                  <td style={S.td}><b>{i.clientName}</b></td>
+                  <td style={{ ...S.td, fontSize: 12, color: C.gray500 }}>{i.services.map(s => s.name).join(", ")}</td>
+                  <td style={{ ...S.td, color: C.green, fontWeight: 700 }}>{fmtCurrency(i.total)}</td>
+                  <td style={S.td}>{i.date}</td>
+                  <td style={{ ...S.td, fontSize: 12 }}>{i.createdBy}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {tab === "expenses" && (
+        <div style={S.card}>
+          <table style={S.table}>
+            <thead><tr>{[t.category,t.description,t.amount,t.date,t.recorded_by,t.proof,""].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
+            <tbody>
+              {[...state.expenses].reverse().map(e => (
+                <tr key={e.id}>
+                  <td style={S.td}><Badge type="pending" label={e.category} /></td>
+                  <td style={S.td}>{e.description}</td>
+                  <td style={{ ...S.td, color: C.red, fontWeight: 700 }}>{fmtCurrency(e.amount)}</td>
+                  <td style={S.td}>{e.date}</td>
+                  <td style={{ ...S.td, fontSize: 12, color: C.gray500 }}>{e.createdBy}</td>
+                  <td style={S.td}>
+                    {e.proof
+                      ? <button style={S.btnSm(C.tealL, C.teal)} onClick={() => setProofViewer(e.proof)}>{"📎 " + t.view}</button>
+                      : <span style={{ fontSize: 11, color: C.gray300 }}>—</span>
+                    }
+                  </td>
+                  <td style={S.td}>
+                    {canAddExpense && (
+                      <button style={S.btnSm(C.redL, C.red)} onClick={() => { if (confirm(t.confirm_del_expense)) dispatch({ type: "DELETE_EXPENSE", id: e.id }); }}>{t.del}</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {tab === "report" && (
+        <div>
+          <div style={{ ...S.card, marginBottom: 18 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 800, color: C.gray400, textTransform: "uppercase", letterSpacing: "0.08em" }}>{t.freshspin_lbl}</div>
+                <h3 style={{ margin: "2px 0 0", fontSize: 15, fontWeight: 800, color: C.gray900 }}>{t.pl_summary}</h3>
+              </div>
+              <span style={{ fontSize: 11, color: C.gray400 }}>{t.generated} {today()}</span>
+            </div>
+            {allMonths.length === 0 ? (
+              <div style={{ textAlign: "center", color: C.gray400, padding: 32 }}>{t.no_data}</div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table style={S.table}>
+                  <thead>
+                    <tr>
+                      <th style={{ ...S.th, minWidth: 170 }}>{t.line_item}</th>
+                      {allMonths.map(m => <th key={m} style={{ ...S.th, textAlign: "right" }}>{fmtMonth(m)}</th>)}
+                      <th style={{ ...S.th, textAlign: "right", borderLeft: `2px solid ${C.gray200}` }}>{t.annual_total}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr style={{ background: C.greenL + "55" }}>
+                      <td style={{ ...S.td, fontWeight: 800, color: C.green }}>{t.row_revenue}</td>
+                      {allMonths.map(m => <td key={m} style={{ ...S.td, textAlign: "right", color: C.green, fontWeight: 700 }}>{fmtCurrency(months[m]?.rev || 0)}</td>)}
+                      <td style={{ ...S.td, textAlign: "right", fontWeight: 900, color: C.green, background: C.gray50, borderLeft: `2px solid ${C.gray200}` }}>{fmtCurrency(revenue)}</td>
+                    </tr>
+                    <tr style={{ background: C.redL + "55" }}>
+                      <td style={{ ...S.td, fontWeight: 800, color: C.red }}>{t.row_expenses}</td>
+                      {allMonths.map(m => <td key={m} style={{ ...S.td, textAlign: "right", color: C.red, fontWeight: 700 }}>{fmtCurrency(months[m]?.exp || 0)}</td>)}
+                      <td style={{ ...S.td, textAlign: "right", fontWeight: 900, color: C.red, background: C.gray50, borderLeft: `2px solid ${C.gray200}` }}>{fmtCurrency(expenses)}</td>
+                    </tr>
+                    <tr style={{ borderTop: `2px solid ${profit >= 0 ? C.green : C.red}` }}>
+                      <td style={{ ...S.td, fontWeight: 800, color: profit >= 0 ? C.green : C.red }}>{t.row_profit}</td>
+                      {allMonths.map(m => { const p = (months[m]?.rev||0)-(months[m]?.exp||0); return <td key={m} style={{ ...S.td, textAlign: "right", color: p >= 0 ? C.green : C.red, fontWeight: 700 }}>{fmtCurrency(p)}</td>; })}
+                      <td style={{ ...S.td, textAlign: "right", fontWeight: 900, color: profit >= 0 ? C.green : C.red, background: C.gray50, borderLeft: `2px solid ${C.gray200}` }}>{fmtCurrency(profit)}</td>
+                    </tr>
+                    <tr>
+                      <td style={{ ...S.td, fontWeight: 700, color: C.gray600 }}>{t.row_margin}</td>
+                      {allMonths.map(m => { const r = months[m]?.rev||0, p = r-(months[m]?.exp||0); return <td key={m} style={{ ...S.td, textAlign: "right", fontWeight: 700, color: r > 0 ? (p >= 0 ? C.green : C.red) : C.gray400 }}>{r > 0 ? (p/r*100).toFixed(1)+"%" : "—"}</td>; })}
+                      <td style={{ ...S.td, textAlign: "right", fontWeight: 900, background: C.gray50, borderLeft: `2px solid ${C.gray200}`, color: revenue > 0 ? (profit >= 0 ? C.green : C.red) : C.gray400 }}>{revenue > 0 ? (profit/revenue*100).toFixed(1)+"%" : "—"}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {expCategories.length > 0 && (
+            <div style={S.card}>
+              <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 800, color: C.gray900 }}>{t.monthly_breakdown}</h3>
+              <div style={{ overflowX: "auto" }}>
+                <table style={S.table}>
+                  <thead>
+                    <tr>
+                      <th style={{ ...S.th, minWidth: 160 }}>{t.category}</th>
+                      {allMonths.map(m => <th key={m} style={{ ...S.th, textAlign: "right" }}>{fmtMonth(m)}</th>)}
+                      <th style={{ ...S.th, textAlign: "right", borderLeft: `2px solid ${C.gray200}` }}>{t.total}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {expCategories.map(cat => {
+                      const catTotal = Object.values(expByCatMonth[cat]).reduce((s,v) => s+v, 0);
+                      return (
+                        <tr key={cat}>
+                          <td style={S.td}><Badge type="pending" label={cat} /></td>
+                          {allMonths.map(m => <td key={m} style={{ ...S.td, textAlign: "right" }}>{expByCatMonth[cat]?.[m] ? fmtCurrency(expByCatMonth[cat][m]) : <span style={{ color: C.gray300 }}>—</span>}</td>)}
+                          <td style={{ ...S.td, textAlign: "right", fontWeight: 700, color: C.red, background: C.gray50, borderLeft: `2px solid ${C.gray200}` }}>{fmtCurrency(catTotal)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ borderTop: `2px solid ${C.gray200}`, background: C.gray50 }}>
+                      <td style={{ ...S.td, fontWeight: 800 }}>{t.total_monthly}</td>
+                      {allMonths.map(m => <td key={m} style={{ ...S.td, textAlign: "right", fontWeight: 800, color: C.red }}>{fmtCurrency(months[m]?.exp || 0)}</td>)}
+                      <td style={{ ...S.td, textAlign: "right", fontWeight: 900, color: C.red, borderLeft: `2px solid ${C.gray200}` }}>{fmtCurrency(expenses)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {showForm && (
+        <Modal title={t.record_new_expense} onClose={() => { setShowForm(false); setProofFile(null); }} width={440}>
+          <Field label={t.category}>
+            <select style={S.input} value={expForm.category} onChange={e => setExpForm(f => ({ ...f, category: e.target.value }))}>
+              {EXP_CATS.map(c => <option key={c}>{c}</option>)}
+            </select>
+          </Field>
+          <Field label={t.description}>
+            <input style={S.input} value={expForm.description} onChange={e => setExpForm(f => ({ ...f, description: e.target.value }))} placeholder="e.g. Monthly electricity" />
+          </Field>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Field label={t.amount_rd}>
+              <input style={S.input} type="number" value={expForm.amount} onChange={e => setExpForm(f => ({ ...f, amount: e.target.value }))} placeholder="0" />
+            </Field>
+            <Field label={t.date}>
+              <input style={S.input} type="date" value={expForm.date} onChange={e => setExpForm(f => ({ ...f, date: e.target.value }))} />
+            </Field>
+          </div>
+          <Field label={t.proof_optional}>
+            <label style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", border: `1.5px dashed ${C.gray300}`, borderRadius: 9, padding: "12px 14px", background: C.gray50 }}>
+              <span style={{ fontSize: 22 }}>📎</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.gray700 }}>{proofFile ? proofFile.name : t.attach_file}</div>
+                <div style={{ fontSize: 11, color: C.gray400 }}>{proofFile ? t.click_to_replace : t.file_types}</div>
+              </div>
+              <input type="file" accept="image/*,.pdf" onChange={handleProof} style={{ display: "none" }} />
+            </label>
+            {proofFile && (
+              <div style={{ marginTop: 8, padding: "6px 12px", background: C.tealL, borderRadius: 7, fontSize: 12, color: C.tealD, display: "flex", alignItems: "center", gap: 6 }}>
+                ✓ <b>{proofFile.name}</b> {t.ready_to_attach}
+              </div>
+            )}
+          </Field>
+          <button style={{ ...S.btn(), width: "100%", justifyContent: "center", padding: "11px 0" }} onClick={addExpense}>
+            {t.record_expense_btn}
+          </button>
+        </Modal>
+      )}
+
+      {proofViewer && (
+        <Modal title={t.proof_title} onClose={() => setProofViewer(null)} width={600}>
+          <div style={{ textAlign: "center" }}>
+            {proofViewer.type === "application/pdf" ? (
+              <div>
+                <div style={{ marginBottom: 12, fontSize: 13, color: C.gray600 }}>📄 {proofViewer.name}</div>
+                <a href={proofViewer.data} download={proofViewer.name} style={{ ...S.btn(C.teal), display: "inline-flex", textDecoration: "none" }}>{t.download_pdf}</a>
+                <p style={{ marginTop: 12, fontSize: 11, color: C.gray400 }}>{t.pdf_note}</p>
+              </div>
+            ) : (
+              <div>
+                <div style={{ marginBottom: 10, fontSize: 12, color: C.gray500 }}>{proofViewer.name}</div>
+                <img src={proofViewer.data} alt="expense proof" style={{ maxWidth: "100%", maxHeight: 400, borderRadius: 9, border: `1px solid ${C.gray200}` }} />
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HR & PAYROLL
+// ═══════════════════════════════════════════════════════════════════════════
+function HR({ state, dispatch }) {
+  const { lang } = React.useContext(LangCtx);
+  const t = T[lang];
+  const [tab, setTab]           = useState("shifts");
+  const [shiftForm, setShiftForm] = useState({ employeeId: "", date: today(), start: "08:00", end: "16:00" });
+  const [showShiftForm, setShowShiftForm] = useState(false);
+
+  const employees = state.users.filter(u => u.role === "employee" || u.role === "manager");
+  const calcHours = (s, e) => {
+    const [sh, sm] = s.split(":").map(Number), [eh, em] = e.split(":").map(Number);
+    return Math.max(0, (eh * 60 + em - sh * 60 - sm) / 60);
+  };
+
+  const addShift = () => {
+    const emp = employees.find(e => e.id === Number(shiftForm.employeeId));
+    if (!emp || !shiftForm.date) return alert(lang === "es" ? "Selecciona empleado y fecha." : "Select employee and date.");
+    const hours = calcHours(shiftForm.start, shiftForm.end);
+    dispatch({ type: "ADD_SHIFT", shift: { id: Date.now(), employeeId: emp.id, employeeName: emp.name, date: shiftForm.date, start: shiftForm.start, end: shiftForm.end, hours, status: "scheduled" } });
+    setShiftForm({ employeeId: "", date: today(), start: "08:00", end: "16:00" });
+    setShowShiftForm(false);
+  };
+
+  const payroll = employees.map(emp => {
+    const empShifts = state.shifts.filter(s => s.employeeId === emp.id && s.status === "completed");
+    const totalHours = empShifts.reduce((s, sh) => s + sh.hours, 0);
+    const regular = Math.min(totalHours, 80), overtime = Math.max(0, totalHours - 80);
+    const gross = regular * state.hrConfig.hourlyRate + overtime * state.hrConfig.hourlyRate * state.hrConfig.overtimeMultiplier;
+    return { ...emp, totalHours, regular, overtime, gross };
+  });
+
+  return (
+    <div>
+      <PageHeader title={t.hr_title}>
+        {tab === "shifts" && (
+          <button style={S.btn()} onClick={() => setShowShiftForm(true)}>{t.schedule_shift}</button>
+        )}
+      </PageHeader>
+
+      <Tabs
+        tabs={[{key:"shifts",label:t.tab_shifts},{key:"payroll",label:t.tab_payroll},{key:"config",label:t.tab_cfg}]}
+        active={tab} onChange={setTab}
+      />
+
+      {tab === "shifts" && (
+        <div style={S.card}>
+          <table style={S.table}>
+            <thead><tr>{[t.employee,t.date,t.start,t.end,t.hours,t.status,t.actions].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
+            <tbody>
+              {[...state.shifts].sort((a,b) => b.date.localeCompare(a.date)).map(s => (
+                <tr key={s.id}>
+                  <td style={S.td}>
+                    <div style={{ display:"flex", alignItems:"center", gap: 8 }}>
+                      <Avatar name={s.employeeName} role="employee" size={28} />
+                      <b>{s.employeeName}</b>
+                    </div>
+                  </td>
+                  <td style={S.td}>{s.date}</td>
+                  <td style={S.td}>{s.start}</td>
+                  <td style={S.td}>{s.end}</td>
+                  <td style={{ ...S.td, fontWeight: 700, color: C.orange }}>{s.hours}h</td>
+                  <td style={S.td}><Badge type={s.status} /></td>
+                  <td style={S.td}>
+                    <div style={{ display:"flex", gap: 6 }}>
+                      {s.status === "scheduled" && (
+                        <button style={S.btnSm(C.greenL, C.green)} onClick={() => dispatch({ type: "UPDATE_SHIFT", shift: { ...s, status: "completed" } })}>{t.done_btn}</button>
+                      )}
+                      <button style={S.btnSm(C.redL, C.red)} onClick={() => dispatch({ type: "DELETE_SHIFT", id: s.id })}>{t.del}</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {tab === "payroll" && (
+        <div>
+          <div style={{ ...S.cardSm, marginBottom: 14, background: C.orangeL, border: `1px solid ${C.orange}44` }}>
+            <span style={{ fontSize: 13, color: C.gray600 }}>
+              {lang === "es" ? "Tarifa:" : "Rate:"} <b style={{ color: C.orangeD }}>{fmtCurrency(state.hrConfig.hourlyRate)}/hr</b> &nbsp;·&nbsp;
+              {lang === "es" ? "Horas Extra:" : "Overtime:"} <b style={{ color: C.orangeD }}>{state.hrConfig.overtimeMultiplier}×</b> &nbsp;·&nbsp;
+              {lang === "es" ? "Período:" : "Period:"} <b style={{ color: C.orangeD }}>{state.hrConfig.payPeriod}</b> &nbsp;·&nbsp;
+              {lang === "es" ? "Basado en" : "Based on"} <b style={{ color: C.orangeD }}>{lang === "es" ? "turnos completados" : "completed shifts only"}</b>
+            </span>
+          </div>
+          <div style={S.card}>
+            <table style={S.table}>
+              <thead><tr>{[t.employee,t.role,t.total_hours,t.regular,t.overtime,t.gross_pay,""].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
+              <tbody>
+                {payroll.map(p => (
+                  <tr key={p.id}>
+                    <td style={S.td}>
+                      <div style={{ display:"flex", alignItems:"center", gap: 8 }}>
+                        <Avatar name={p.name} role={p.role} size={28} />
+                        <b>{p.name}</b>
+                      </div>
+                    </td>
+                    <td style={S.td}><Badge type={p.role} /></td>
+                    <td style={S.td}>{p.totalHours}h</td>
+                    <td style={S.td}>{p.regular}h</td>
+                    <td style={S.td}>{p.overtime}h {p.overtime > 0 && <Badge type="pending" label="OT" />}</td>
+                    <td style={{ ...S.td, fontWeight: 900, fontSize: 15, color: C.green }}>{fmtCurrency(p.gross)}</td>
+                    <td style={S.td}>
+                      <button style={S.btnSm(C.tealL, C.teal)} onClick={() => {
+                        const msg = lang === "es"
+                          ? `Recibo de Pago — ${p.name}\n\nRegular: ${p.regular}h × ${fmtCurrency(state.hrConfig.hourlyRate)} = ${fmtCurrency(p.regular * state.hrConfig.hourlyRate)}\nHoras Extra: ${p.overtime}h × ${fmtCurrency(state.hrConfig.hourlyRate * state.hrConfig.overtimeMultiplier)} = ${fmtCurrency(p.overtime * state.hrConfig.hourlyRate * state.hrConfig.overtimeMultiplier)}\n\nTOTAL BRUTO: ${fmtCurrency(p.gross)}`
+                          : `Pay Slip — ${p.name}\n\nRegular: ${p.regular}h × ${fmtCurrency(state.hrConfig.hourlyRate)} = ${fmtCurrency(p.regular * state.hrConfig.hourlyRate)}\nOvertime: ${p.overtime}h × ${fmtCurrency(state.hrConfig.hourlyRate * state.hrConfig.overtimeMultiplier)} = ${fmtCurrency(p.overtime * state.hrConfig.hourlyRate * state.hrConfig.overtimeMultiplier)}\n\nGROSS: ${fmtCurrency(p.gross)}`;
+                        alert(msg);
+                      }}>
+                        {t.pay_slip}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan={5} style={{ ...S.td, fontWeight: 700, textAlign: "right", color: C.gray600 }}>{t.total_payroll}</td>
+                  <td style={{ ...S.td, fontWeight: 900, fontSize: 16, color: C.red }}>{fmtCurrency(payroll.reduce((s, p) => s + p.gross, 0))}</td>
+                  <td style={S.td}></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {tab === "config" && (
+        <div style={{ ...S.card, maxWidth: 400 }}>
+          <h3 style={{ margin: "0 0 18px", fontSize: 15, fontWeight: 800 }}>{t.hr_cfg_title}</h3>
+          <Field label={t.hourly_rate}>
+            <input style={S.input} type="number" defaultValue={state.hrConfig.hourlyRate}
+              onBlur={e => dispatch({ type: "UPDATE_HR_CONFIG", config: { hourlyRate: Number(e.target.value) } })} />
+          </Field>
+          <Field label={t.overtime_mult}>
+            <input style={S.input} type="number" step="0.1" defaultValue={state.hrConfig.overtimeMultiplier}
+              onBlur={e => dispatch({ type: "UPDATE_HR_CONFIG", config: { overtimeMultiplier: Number(e.target.value) } })} />
+          </Field>
+          <Field label={t.pay_period}>
+            <select style={S.input} defaultValue={state.hrConfig.payPeriod}
+              onChange={e => dispatch({ type: "UPDATE_HR_CONFIG", config: { payPeriod: e.target.value } })}>
+              {["weekly","biweekly","monthly"].map(p => <option key={p}>{p}</option>)}
+            </select>
+          </Field>
+          <div style={{ background: C.greenL, borderRadius: 9, padding: "10px 14px", fontSize: 12, color: C.green, fontWeight: 700 }}>
+            {t.cfg_note}
+          </div>
+        </div>
+      )}
+
+      {showShiftForm && (
+        <Modal title={t.schedule_shift_title} onClose={() => setShowShiftForm(false)} width={420}>
+          <Field label={t.employee}>
+            <select style={S.input} value={shiftForm.employeeId} onChange={e => setShiftForm(f => ({ ...f, employeeId: e.target.value }))}>
+              <option value="">{t.select_employee}</option>
+              {employees.map(e => <option key={e.id} value={e.id}>{e.name} ({e.role})</option>)}
+            </select>
+          </Field>
+          <Field label={t.date}>
+            <input style={S.input} type="date" value={shiftForm.date} onChange={e => setShiftForm(f => ({ ...f, date: e.target.value }))} />
+          </Field>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Field label={t.start}>
+              <input style={S.input} type="time" value={shiftForm.start} onChange={e => setShiftForm(f => ({ ...f, start: e.target.value }))} />
+            </Field>
+            <Field label={t.end}>
+              <input style={S.input} type="time" value={shiftForm.end} onChange={e => setShiftForm(f => ({ ...f, end: e.target.value }))} />
+            </Field>
+          </div>
+          <div style={{ background: C.orangeL, borderRadius: 9, padding: "10px 14px", marginBottom: 16, fontSize: 13, fontWeight: 700, color: C.orangeD }}>
+            {t.duration} {shiftForm.start && shiftForm.end ? calcHours(shiftForm.start, shiftForm.end) + " " + t.hours : "—"}
+          </div>
+          <button style={{ ...S.btn(), width: "100%", justifyContent: "center", padding: "11px 0" }} onClick={addShift}>
+            {t.schedule_btn}
+          </button>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EMPLOYEES
+// ═══════════════════════════════════════════════════════════════════════════
+function Employees({ state, dispatch }) {
+  const { lang } = React.useContext(LangCtx);
+  const t = T[lang];
+  const [showForm, setShowForm] = useState(false);
+  const [editing,  setEditing]  = useState(null);
+  const [form, setForm] = useState({ name:"", email:"", phone:"", role:"employee", password:"", pin:"" });
+  const [search, setSearch] = useState("");
+
+  const canManageAll = state.currentUser.role === "owner";
+
+  const filteredUsers = state.users.filter(u =>
+    u.name.toLowerCase().includes(search.toLowerCase()) ||
+    u.email.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const openNew = () => {
+    setEditing(null);
+    setForm({ name:"", email:"", phone:"", role:"employee", password: uid().toLowerCase(), pin: Math.floor(1000 + Math.random() * 9000).toString() });
+    setShowForm(true);
+  };
+
+  const openEdit = u => {
+    setEditing(u);
+    setForm({ name: u.name, email: u.email, phone: u.phone || "", role: u.role, password: u.password, pin: u.pin });
+    setShowForm(true);
+  };
+
+  const save = () => {
+    if (!form.name || !form.email || !form.password) return alert(t.alert_emp_fields);
+    if (editing) {
+      dispatch({ type: "UPDATE_USER", user: { ...editing, ...form } });
+    } else {
+      dispatch({ type: "ADD_USER", user: { ...form, id: Date.now(), avatar: initials(form.name), active: true, createdAt: today() } });
+    }
+    setShowForm(false); setEditing(null);
+  };
+
+  const roleOptions = canManageAll ? ["employee","manager","owner"] : ["employee","manager"];
+
+  return (
+    <div>
+      <PageHeader title={t.emp_title}>
+        <input style={{ ...S.input, width: 240 }} value={search} onChange={e => setSearch(e.target.value)} placeholder={t.search_emp} />
+        <button style={S.btn()} onClick={openNew}>{t.new_emp}</button>
+      </PageHeader>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))", gap: 14, marginBottom: 22 }}>
+        {filteredUsers.map(u => (
+          <div key={u.id} style={{ ...S.card, padding: "18px 20px", opacity: u.active === false ? 0.55 : 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+              <Avatar name={u.name} role={u.role} size={42} />
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: C.gray900 }}>{u.name}</div>
+                <Badge type={u.role} />
+              </div>
+              {u.active === false && <span style={{ marginLeft: "auto", ...S.badge(C.gray200, C.gray500), fontSize: 10 }}>{t.inactive_lbl}</span>}
+            </div>
+            <div style={{ fontSize: 12, color: C.gray500, lineHeight: 1.8 }}>
+              <div>📧 {u.email}</div>
+              {u.phone && <div>📱 {u.phone}</div>}
+              <div>📅 {t.joined_lbl} {u.createdAt}</div>
+            </div>
+            <div style={{ display: "flex", gap: 6, marginTop: 14 }}>
+              <button style={{ ...S.btnSm(C.tealL, C.teal), flex: 1, justifyContent: "center" }} onClick={() => openEdit(u)}>{t.edit}</button>
+              {(canManageAll || u.role === "employee") && u.id !== state.currentUser.id && (
+                <button style={{ ...S.btnSm(u.active === false ? C.greenL : C.redL, u.active === false ? C.green : C.red), flex: 1, justifyContent: "center" }}
+                  onClick={() => dispatch({ type: "TOGGLE_USER_ACTIVE", id: u.id })}>
+                  {u.active === false ? t.activate : t.deactivate}
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {showForm && (
+        <Modal title={editing ? `${t.edit} — ${editing.name}` : t.new_emp_profile} onClose={() => setShowForm(false)} width={480}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Field label={t.full_name} style={{ gridColumn: "1/-1" }}>
+              <input style={S.input} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="First Last" />
+            </Field>
+            <Field label={t.email}>
+              <input style={S.input} type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="email@freshspin.com" />
+            </Field>
+            <Field label={t.phone}>
+              <input style={S.input} value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="809-555-0000" />
+            </Field>
+            <Field label={t.role}>
+              <select style={S.input} value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}>
+                {roleOptions.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase()+r.slice(1)}</option>)}
+              </select>
+            </Field>
+            <Field label={t.password_lbl}>
+              <input style={S.input} type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder={t.password_ph} />
+            </Field>
+            <Field label={t.pin_lbl} style={{ gridColumn: "1/-1" }}>
+              <input style={S.input} maxLength={4} value={form.pin} onChange={e => setForm(f => ({ ...f, pin: e.target.value }))} placeholder={t.pin_ph} />
+            </Field>
+          </div>
+          <div style={{ background: C.yellowL, borderRadius: 9, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: C.yellow }}>
+            {t.credentials_warn}
+          </div>
+          <button style={{ ...S.btn(), width: "100%", justifyContent: "center", padding: "11px 0" }} onClick={save}>
+            {editing ? t.save_changes : t.create_emp_profile}
+          </button>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MAIN APP
+// ═══════════════════════════════════════════════════════════════════════════
+function App() {
+  const [state, dispatch] = useReducer(reducer, initState);
+  const [active, setActive] = useState("dashboard");
+  const [invoiceClientId, setInvoiceClientId] = useState(null);
+  const [lang, setLang] = useState("en");
+
+  if (!state.currentUser) return (
+    <LangCtx.Provider value={{ lang, setLang }}>
+      <LoginScreen state={state} dispatch={dispatch} />
+    </LangCtx.Provider>
+  );
+
+  const role    = state.currentUser.role;
+  const allowed = ROLE_ACCESS[role] || [];
+
+  const handleNewInvoice = (clientId) => {
+    setInvoiceClientId(clientId);
+    setActive("pos");
+    setTimeout(() => setInvoiceClientId(null), 200);
+  };
+
+  const renderPage = () => {
+    const t = T[lang];
+    if (!allowed.includes(active)) {
+      return <div style={{ ...S.card, textAlign: "center", color: C.gray400, padding: 48 }}>{t.access_restricted}</div>;
+    }
+    switch (active) {
+      case "dashboard":  return <Dashboard   state={state} setActive={setActive} />;
+      case "pos":        return <POS         state={state} dispatch={dispatch} prefillClientId={invoiceClientId} />;
+      case "clients":    return <Clients     state={state} dispatch={dispatch} onNewInvoice={handleNewInvoice} />;
+      case "shifts":     return <MyShifts    state={state} dispatch={dispatch} />;
+      case "accounting": return <Accounting  state={state} dispatch={dispatch} />;
+      case "hr":         return <HR          state={state} dispatch={dispatch} />;
+      case "employees":  return <Employees   state={state} dispatch={dispatch} />;
+      default:           return null;
+    }
+  };
+
+  return (
+    <LangCtx.Provider value={{ lang, setLang }}>
+      <div style={{ ...S.page, display: "flex" }}>
+        <Sidebar active={active} setActive={setActive} user={state.currentUser} dispatch={dispatch} />
+        <main id="main" style={{ flex: 1, padding: "28px 32px", overflowY: "auto", maxHeight: "100vh" }}>
+          {renderPage()}
+        </main>
+      </div>
+    </LangCtx.Provider>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
+</script>
+</body>
+</html>
