@@ -274,7 +274,7 @@ const ROLE_ACCESS = {
 };
 
 const initState = {
-  currentUser: null,
+  currentUser:   null,
   users:         [{ id: 1, name: "Max", role: "manager", email: "maxforwork7@gmail.com", password: "Fresh1234", pin: "1234", phone: "", avatar: "MX", active: true, createdAt: "2026-01-01" }],
   clients:       [],
   invoices:      [],
@@ -287,7 +287,7 @@ const initState = {
 
 function reducer(state, action) {
   switch (action.type) {
-    case "LOAD_DATA":           return { ...state, ...action.data, _loaded: true };
+    case "LOAD_DATA": return { ...state, ...action.data, _loaded: true };
     case "LOGIN":              return { ...state, currentUser: action.user };
     case "LOGOUT":             return { ...state, currentUser: null };
     case "ADD_CLIENT":         return { ...state, clients: [...state.clients, action.client] };
@@ -563,33 +563,58 @@ function Dashboard({ state, setActive }) {
   const { lang } = React.useContext(LangCtx);
   const t = T[lang];
   const role = state.currentUser.role;
-  const paidInvs = state.invoices.filter(i => i.status === "delivered");
-  const totalRevenue  = paidInvs.reduce((s, i) => s + i.total, 0);
-  const totalExpenses = state.expenses.reduce((s, e) => s + e.amount, 0);
-  const pending       = state.invoices.filter(i => i.status === "pending").length;
-  const myShifts = state.shifts.filter(s => s.employeeId === state.currentUser.id);
-  const upcoming  = myShifts.filter(s => s.status === "scheduled").length;
-  const completed = myShifts.filter(s => s.status === "completed").length;
   const isPriv = role === "owner" || role === "manager";
+  const [dateRange, setDateRange] = React.useState("all");
+
+  const filterByRange = (items, dateKey) => {
+    const now = new Date();
+    return items.filter(item => {
+      const d = new Date(item[dateKey]);
+      if (dateRange === "week") { const s = new Date(now); s.setDate(now.getDate()-now.getDay()); s.setHours(0,0,0,0); return d >= s; }
+      if (dateRange === "month") return d.getMonth()===now.getMonth() && d.getFullYear()===now.getFullYear();
+      if (dateRange === "year")  return d.getFullYear()===now.getFullYear();
+      return true;
+    });
+  };
+
+  const rangeLabels = { all: lang==="es"?"Todo":"All Time", week: lang==="es"?"Esta Semana":"This Week", month: lang==="es"?"Este Mes":"This Month", year: lang==="es"?"Este Año":"This Year" };
+  const btnStyle = r => ({ padding:"6px 14px", borderRadius:20, border:"none", cursor:"pointer", fontWeight:700, fontSize:12, background: dateRange===r ? C.orange : C.gray100, color: dateRange===r ? "#fff" : C.gray600, transition:"all 0.2s" });
+
+  const filteredInvs     = filterByRange(state.invoices, "date");
+  const filteredPaidInvs = filteredInvs.filter(i => i.status === "delivered");
+  const filteredExpenses = filterByRange(state.expenses, "date");
+  const totalRevenue     = filteredPaidInvs.reduce((s,i) => s+i.total, 0);
+  const totalExpenses    = filteredExpenses.reduce((s,e) => s+e.amount, 0);
+  const pending          = filteredInvs.filter(i => i.status==="pending").length;
+  const myShifts  = state.shifts.filter(s => s.employeeId === state.currentUser.id);
+  const upcoming  = myShifts.filter(s => s.status==="scheduled").length;
+  const completed = myShifts.filter(s => s.status==="completed").length;
 
   return (
     <div>
-      <div style={{ marginBottom: 22 }}>
-        <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: C.gray900, letterSpacing: "-0.02em" }}>
-          {t.welcome}, {state.currentUser.name.split(" ")[0]} 👋
-        </h2>
-        <p style={{ margin: "4px 0 0", fontSize: 13, color: C.gray500 }}>{new Date().toLocaleDateString(lang === "es" ? "es-DO" : "en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
+      <div style={{ marginBottom:22, display:"flex", alignItems:"flex-start", justifyContent:"space-between", flexWrap:"wrap", gap:12 }}>
+        <div>
+          <h2 style={{ margin:0, fontSize:20, fontWeight:800, color:C.gray900, letterSpacing:"-0.02em" }}>
+            {t.welcome}, {state.currentUser.name.split(" ")[0]} 👋
+          </h2>
+          <p style={{ margin:"4px 0 0", fontSize:13, color:C.gray500 }}>{new Date().toLocaleDateString(lang==="es"?"es-DO":"en-US", { weekday:"long", year:"numeric", month:"long", day:"numeric" })}</p>
+        </div>
+        {isPriv && (
+          <div style={{ display:"flex", gap:6, background:C.gray50, padding:4, borderRadius:24, border:`1px solid ${C.gray200}` }}>
+            {["all","week","month","year"].map(r => <button key={r} style={btnStyle(r)} onClick={()=>setDateRange(r)}>{rangeLabels[r]}</button>)}
+          </div>
+        )}
       </div>
 
       {isPriv ? (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(170px,1fr))", gap: 14, marginBottom: 24 }}>
-            <StatCard label={t.total_revenue}  value={fmtCurrency(totalRevenue)}   icon="💰" color={C.green}    />
-            <StatCard label={t.total_expenses} value={fmtCurrency(totalExpenses)}  icon="📉" color={C.red}      />
-            <StatCard label={t.net_profit}     value={fmtCurrency(totalRevenue - totalExpenses)} icon="📈" color={totalRevenue - totalExpenses >= 0 ? C.orange : C.red} />
-            <StatCard label={t.active_clients} value={state.clients.length}        icon="👥" color={C.teal}     />
-            <StatCard label={t.invoices}       value={state.invoices.length}       icon="🧾" color={C.gray600}  />
-            <StatCard label={t.pending}        value={pending}                     icon="⏳" color={C.yellow}   />
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(170px,1fr))", gap:14, marginBottom:24 }}>
+            <StatCard label={t.total_revenue}  value={fmtCurrency(totalRevenue)}  icon="💰" color={C.green}   />
+            <StatCard label={t.total_expenses} value={fmtCurrency(totalExpenses)} icon="📉" color={C.red}     />
+            <StatCard label={t.net_profit}     value={fmtCurrency(totalRevenue-totalExpenses)} icon="📈" color={totalRevenue-totalExpenses>=0?C.orange:C.red} />
+            <StatCard label={t.active_clients} value={state.clients.length}       icon="👥" color={C.teal}    />
+            <StatCard label={t.invoices}       value={filteredInvs.length}        icon="🧾" color={C.gray600} />
+            <StatCard label={t.pending}        value={pending}                    icon="⏳" color={C.yellow}  />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             <div style={S.card}>
@@ -597,7 +622,7 @@ function Dashboard({ state, setActive }) {
               <table style={S.table}>
                 <thead><tr>{["ID", t.client_col, t.total, t.status].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
                 <tbody>
-                  {[...state.invoices].reverse().slice(0,5).map(i => (
+                  {[...filteredInvs].reverse().slice(0,5).map(i => (
                     <tr key={i.id}>
                       <td style={S.td}><b style={{ color: C.orange, fontSize: 12 }}>{i.id}</b></td>
                       <td style={S.td}>{i.clientName}</td>
@@ -613,7 +638,7 @@ function Dashboard({ state, setActive }) {
               <table style={S.table}>
                 <thead><tr>{[t.category, t.description, t.amount].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
                 <tbody>
-                  {[...state.expenses].reverse().slice(0,5).map(e => (
+                  {[...filteredExpenses].reverse().slice(0,5).map(e => (
                     <tr key={e.id}>
                       <td style={S.td}><Badge type="pending" label={e.category} /></td>
                       <td style={S.td}>{e.description}</td>
@@ -1301,24 +1326,40 @@ const EXP_CATS = ["Utilities","Supplies","Maintenance","Salaries","Rent","Market
 function Accounting({ state, dispatch }) {
   const { lang } = React.useContext(LangCtx);
   const t = T[lang];
-  const [tab, setTab]         = useState("overview");
-  const [expForm, setExpForm] = useState({ category: "Utilities", description: "", amount: "", date: today() });
+  const [tab, setTab]           = useState("overview");
+  const [expForm, setExpForm]   = useState({ category:"Utilities", description:"", amount:"", date:today() });
   const [showForm, setShowForm] = useState(false);
-  const [proofFile, setProofFile] = useState(null);
+  const [proofFile, setProofFile]   = useState(null);
   const [proofViewer, setProofViewer] = useState(null);
+  const [dateRange, setDateRange]   = useState("all");
 
-  const paidInvs  = state.invoices.filter(i => i.status === "delivered");
-  const revenue   = paidInvs.reduce((s, i) => s + i.total, 0);
-  const expenses  = state.expenses.reduce((s, e) => s + e.amount, 0);
-  const profit    = revenue - expenses;
+  const filterByRange = (items, dateKey) => {
+    const now = new Date();
+    return items.filter(item => {
+      const d = new Date(item[dateKey]);
+      if (dateRange==="week") { const s=new Date(now); s.setDate(now.getDate()-now.getDay()); s.setHours(0,0,0,0); return d>=s; }
+      if (dateRange==="month") return d.getMonth()===now.getMonth() && d.getFullYear()===now.getFullYear();
+      if (dateRange==="year")  return d.getFullYear()===now.getFullYear();
+      return true;
+    });
+  };
+
+  const rangeLabels = { all:lang==="es"?"Todo":"All Time", week:lang==="es"?"Esta Semana":"This Week", month:lang==="es"?"Este Mes":"This Month", year:lang==="es"?"Este Año":"This Year" };
+  const btnStyle = r => ({ padding:"6px 14px", borderRadius:20, border:"none", cursor:"pointer", fontWeight:700, fontSize:12, background:dateRange===r?C.orange:C.gray100, color:dateRange===r?"#fff":C.gray600, transition:"all 0.2s" });
+
+  const paidInvs         = filterByRange(state.invoices.filter(i=>i.status==="delivered"), "date");
+  const filteredExpenses = filterByRange(state.expenses, "date");
+  const revenue  = paidInvs.reduce((s,i)=>s+i.total, 0);
+  const expenses = filteredExpenses.reduce((s,e)=>s+e.amount, 0);
+  const profit   = revenue - expenses;
 
   const months = {};
-  paidInvs.forEach(i  => { const m = i.date.slice(0,7); if (!months[m]) months[m] = { rev: 0, exp: 0 }; months[m].rev += i.total; });
-  state.expenses.forEach(e => { const m = e.date.slice(0,7); if (!months[m]) months[m] = { rev: 0, exp: 0 }; months[m].exp += e.amount; });
+  paidInvs.forEach(i  => { const m=i.date.slice(0,7); if(!months[m]) months[m]={rev:0,exp:0}; months[m].rev+=i.total; });
+  filteredExpenses.forEach(e => { const m=e.date.slice(0,7); if(!months[m]) months[m]={rev:0,exp:0}; months[m].exp+=e.amount; });
 
   const allMonths = Object.keys(months).sort();
   const expByCatMonth = {};
-  state.expenses.forEach(e => {
+  filteredExpenses.forEach(e => {
     const m = e.date.slice(0,7);
     if (!expByCatMonth[e.category]) expByCatMonth[e.category] = {};
     expByCatMonth[e.category][m] = (expByCatMonth[e.category][m] || 0) + e.amount;
@@ -1389,6 +1430,12 @@ function Accounting({ state, dispatch }) {
         </>}
       </PageHeader>
 
+      <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:14 }}>
+        <div style={{ display:"flex", gap:6, background:C.gray50, padding:4, borderRadius:24, border:`1px solid ${C.gray200}` }}>
+          {["all","week","month","year"].map(r => <button key={r} style={btnStyle(r)} onClick={()=>setDateRange(r)}>{rangeLabels[r]}</button>)}
+        </div>
+      </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 22 }}>
         <StatCard label={t.total_revenue}  value={fmtCurrency(revenue)}  icon="💰" color={C.green} />
         <StatCard label={t.total_expenses} value={fmtCurrency(expenses)} icon="📉" color={C.red} />
@@ -1447,7 +1494,7 @@ function Accounting({ state, dispatch }) {
           <table style={S.table}>
             <thead><tr>{[t.category,t.description,t.amount,t.date,t.recorded_by,t.proof,""].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
             <tbody>
-              {[...state.expenses].reverse().map(e => (
+              {[...filteredExpenses].reverse().map(e => (
                 <tr key={e.id}>
                   <td style={S.td}><Badge type="pending" label={e.category} /></td>
                   <td style={S.td}>{e.description}</td>
@@ -1922,95 +1969,86 @@ function Employees({ state, dispatch }) {
 // ═══════════════════════════════════════════════════════════════════════════
 // MAIN APP
 // ═══════════════════════════════════════════════════════════════════════════
-// ─── API HELPER ─────────────────────────────────────────────────────────────
+// ─── API HELPER ──────────────────────────────────────────────────────────────
 const API = {
-  get:    (url)       => fetch(url).then(r => r.json()),
-  post:   (url, body) => fetch(url, { method:"POST",   headers:{"Content-Type":"application/json"}, body: JSON.stringify(body) }).then(r => r.json()),
-  put:    (url, body) => fetch(url, { method:"PUT",    headers:{"Content-Type":"application/json"}, body: JSON.stringify(body) }).then(r => r.json()),
-  patch:  (url, body) => fetch(url, { method:"PATCH",  headers:{"Content-Type":"application/json"}, body: JSON.stringify(body) }).then(r => r.json()),
-  delete: (url)       => fetch(url, { method:"DELETE" }).then(r => r.json()),
+  get:    url       => fetch(url).then(r=>r.json()),
+  post:   (url,b)   => fetch(url,{method:"POST",  headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
+  put:    (url,b)   => fetch(url,{method:"PUT",   headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
+  patch:  (url,b)   => fetch(url,{method:"PATCH", headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
+  delete: url       => fetch(url,{method:"DELETE"}).then(r=>r.json()),
 };
 
 function App() {
-  const [state, dispatch] = useReducer(reducer, initState);
-  const [active, setActive] = useState("dashboard");
+  const [state, dispatch]           = useReducer(reducer, initState);
+  const [active, setActive]         = useState("dashboard");
   const [invoiceClientId, setInvoiceClientId] = useState(null);
-  const [lang, setLang] = useState("en");
-  const [loading, setLoading] = useState(true);
+  const [lang, setLang]             = useState("en");
+  const [loading, setLoading]       = useState(true);
 
-  // Load all data from database on startup
+  // ── Load all data from DB on startup ──
   useEffect(() => {
-    API.get("/api/data").then(data => {
-      dispatch({ type: "LOAD_DATA", data });
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    API.get("/api/data")
+      .then(data => { dispatch({ type:"LOAD_DATA", data }); setLoading(false); })
+      .catch(() => setLoading(false));
   }, []);
 
-  // Wrap dispatch to also sync to database
-  const dbDispatch = async (action) => {
-    dispatch(action); // update UI immediately
+  // ── DB-synced dispatch ──
+  const dbDispatch = async action => {
+    dispatch(action);
     try {
-      switch (action.type) {
-        case "ADD_CLIENT":
-          const nc = await API.post("/api/clients", action.client);
-          if (nc.id) dispatch({ type:"UPDATE_CLIENT", client:{ ...action.client, id: nc.id }});
-          break;
-        case "UPDATE_CLIENT":
-          await API.put(`/api/clients/${action.client.id}`, action.client); break;
-        case "DELETE_CLIENT":
-          await API.delete(`/api/clients/${action.id}`); break;
-        case "ADD_INVOICE":
-          await API.post("/api/invoices", action.invoice); break;
-        case "UPDATE_INVOICE_STATUS": {
-          const inv = state.invoices.find(i => i.id === action.id);
-          const loyaltyGain = inv && inv.status !== "delivered" && action.status === "delivered" ? Math.floor(inv.total / 10) : 0;
-          await API.patch(`/api/invoices/${action.id}`, { status: action.status, clientId: inv?.clientId, loyaltyGain });
+      switch(action.type) {
+        case "ADD_CLIENT": {
+          const r = await API.post("/api/clients", action.client);
+          if(r.id) dispatch({type:"UPDATE_CLIENT", client:{...action.client, id:r.id}});
           break;
         }
-        case "DELETE_INVOICE":
-          await API.delete(`/api/invoices/${action.id}`); break;
-        case "ADD_EXPENSE":
-          const ne = await API.post("/api/expenses", action.expense);
-          if (ne.id) dispatch({ type:"ADD_EXPENSE", expense:{ ...action.expense, id: ne.id }});
+        case "UPDATE_CLIENT":   await API.put(`/api/clients/${action.client.id}`, action.client); break;
+        case "DELETE_CLIENT":   await API.delete(`/api/clients/${action.id}`); break;
+        case "ADD_INVOICE":     await API.post("/api/invoices", action.invoice); break;
+        case "UPDATE_INVOICE_STATUS": {
+          const inv = state.invoices.find(i=>i.id===action.id);
+          const loyaltyGain = inv && inv.status!=="delivered" && action.status==="delivered" ? Math.floor(inv.total/10) : 0;
+          await API.patch(`/api/invoices/${action.id}`, {status:action.status, clientId:inv?.clientId, loyaltyGain});
           break;
-        case "DELETE_EXPENSE":
-          await API.delete(`/api/expenses/${action.id}`); break;
-        case "ADD_SHIFT":
-          const ns = await API.post("/api/shifts", action.shift);
-          if (ns.id) dispatch({ type:"UPDATE_SHIFT", shift:{ ...action.shift, id: ns.id }});
+        }
+        case "DELETE_INVOICE":  await API.delete(`/api/invoices/${action.id}`); break;
+        case "ADD_EXPENSE": {
+          const r = await API.post("/api/expenses", action.expense);
+          if(r.id) dispatch({type:"UPDATE_EXPENSE", expense:{...action.expense, id:r.id}});
           break;
-        case "UPDATE_SHIFT":
-          await API.put(`/api/shifts/${action.shift.id}`, action.shift); break;
-        case "DELETE_SHIFT":
-          await API.delete(`/api/shifts/${action.id}`); break;
-        case "ADD_USER":
-          const nu = await API.post("/api/users", action.user);
-          if (nu.id) dispatch({ type:"UPDATE_USER", user:{ ...action.user, id: nu.id }});
+        }
+        case "DELETE_EXPENSE":  await API.delete(`/api/expenses/${action.id}`); break;
+        case "ADD_SHIFT": {
+          const r = await API.post("/api/shifts", action.shift);
+          if(r.id) dispatch({type:"UPDATE_SHIFT", shift:{...action.shift, id:r.id}});
           break;
-        case "UPDATE_USER":
-          await API.put(`/api/users/${action.user.id}`, action.user); break;
-        case "TOGGLE_USER_ACTIVE":
-          await API.patch(`/api/users/${action.id}`, {}); break;
-        case "UPDATE_HR_CONFIG":
-          await API.put("/api/hrconfig", action.config); break;
-        case "ADD_SUBSCRIPTION":
-          const nsub = await API.post("/api/subscriptions", action.sub);
-          if (nsub.id) dispatch({ type:"UPDATE_SUBSCRIPTION", sub:{ ...action.sub, id: nsub.id }});
+        }
+        case "UPDATE_SHIFT":    await API.put(`/api/shifts/${action.shift.id}`, action.shift); break;
+        case "DELETE_SHIFT":    await API.delete(`/api/shifts/${action.id}`); break;
+        case "ADD_USER": {
+          const r = await API.post("/api/users", action.user);
+          if(r.id) dispatch({type:"UPDATE_USER", user:{...action.user, id:r.id}});
           break;
-        case "UPDATE_SUBSCRIPTION":
-          await API.put(`/api/subscriptions/${action.sub.id}`, action.sub); break;
+        }
+        case "UPDATE_USER":         await API.put(`/api/users/${action.user.id}`, action.user); break;
+        case "TOGGLE_USER_ACTIVE":  await API.patch(`/api/users/${action.id}`, {}); break;
+        case "UPDATE_HR_CONFIG":    await API.put("/api/hrconfig", action.config); break;
+        case "ADD_SUBSCRIPTION": {
+          const r = await API.post("/api/subscriptions", action.sub);
+          if(r.id) dispatch({type:"UPDATE_SUBSCRIPTION", sub:{...action.sub, id:r.id}});
+          break;
+        }
+        case "UPDATE_SUBSCRIPTION": await API.put(`/api/subscriptions/${action.sub.id}`, action.sub); break;
         default: break;
       }
-    } catch(err) {
-      console.error("DB sync error:", err);
-    }
+    } catch(err) { console.error("DB sync error:", err); }
   };
 
   if (loading) return (
-    <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", background:"#F0F4F8", flexDirection:"column", gap:16 }}>
-      <div style={{ fontSize:40 }}>🧺</div>
-      <div style={{ fontSize:18, fontWeight:800, color:"#1a1a2e" }}>FreshSpin CRM</div>
-      <div style={{ fontSize:13, color:"#666" }}>Loading your data…</div>
+    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#F0F4F8",flexDirection:"column",gap:16}}>
+      <div style={{fontSize:48}}>🧺</div>
+      <div style={{fontSize:20,fontWeight:800,color:"#1a1a2e"}}>FreshSpin CRM</div>
+      <div style={{fontSize:13,color:"#888"}}>Loading your data…</div>
     </div>
   );
 
@@ -2023,34 +2061,28 @@ function App() {
   const role    = state.currentUser.role;
   const allowed = ROLE_ACCESS[role] || [];
 
-  const handleNewInvoice = (clientId) => {
-    setInvoiceClientId(clientId);
-    setActive("pos");
-    setTimeout(() => setInvoiceClientId(null), 200);
-  };
+  const handleNewInvoice = clientId => { setInvoiceClientId(clientId); setActive("pos"); setTimeout(()=>setInvoiceClientId(null),200); };
 
   const renderPage = () => {
     const t = T[lang];
-    if (!allowed.includes(active)) {
-      return <div style={{ ...S.card, textAlign: "center", color: C.gray400, padding: 48 }}>{t.access_restricted}</div>;
-    }
-    switch (active) {
-      case "dashboard":  return <Dashboard   state={state} setActive={setActive} />;
-      case "pos":        return <POS         state={state} dispatch={dbDispatch} prefillClientId={invoiceClientId} />;
-      case "clients":    return <Clients     state={state} dispatch={dbDispatch} onNewInvoice={handleNewInvoice} />;
-      case "shifts":     return <MyShifts    state={state} dispatch={dbDispatch} />;
-      case "accounting": return <Accounting  state={state} dispatch={dbDispatch} />;
-      case "hr":         return <HR          state={state} dispatch={dbDispatch} />;
-      case "employees":  return <Employees   state={state} dispatch={dbDispatch} />;
+    if (!allowed.includes(active)) return <div style={{...S.card,textAlign:"center",color:C.gray400,padding:48}}>{t.access_restricted}</div>;
+    switch(active) {
+      case "dashboard":  return <Dashboard  state={state} setActive={setActive} />;
+      case "pos":        return <POS        state={state} dispatch={dbDispatch} prefillClientId={invoiceClientId} />;
+      case "clients":    return <Clients    state={state} dispatch={dbDispatch} onNewInvoice={handleNewInvoice} />;
+      case "shifts":     return <MyShifts   state={state} dispatch={dbDispatch} />;
+      case "accounting": return <Accounting state={state} dispatch={dbDispatch} />;
+      case "hr":         return <HR         state={state} dispatch={dbDispatch} />;
+      case "employees":  return <Employees  state={state} dispatch={dbDispatch} />;
       default:           return null;
     }
   };
 
   return (
     <LangCtx.Provider value={{ lang, setLang }}>
-      <div style={{ ...S.page, display: "flex" }}>
+      <div style={{ ...S.page, display:"flex" }}>
         <Sidebar active={active} setActive={setActive} user={state.currentUser} dispatch={dispatch} />
-        <main id="main" style={{ flex: 1, padding: "28px 32px", overflowY: "auto", maxHeight: "100vh" }}>
+        <main id="main" style={{ flex:1, padding:"28px 32px", overflowY:"auto", maxHeight:"100vh" }}>
           {renderPage()}
         </main>
       </div>
