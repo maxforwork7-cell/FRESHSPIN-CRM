@@ -1991,7 +1991,10 @@ function DeliveryTracker({ state, dispatch }) {
   const isTL      = role === "team_lead";
 
   const [tab,       setTab]      = useState("log");
-  const [form,      setForm]     = useState({ driverId:"", date:today(), qty:1, notes:"" });
+  const [driverId,  setDriverId] = useState("");
+  const [date,      setDate]     = useState(today());
+  const [qty,       setQty]      = useState(1);
+  const [notes,     setNotes]    = useState("");
   const [filter,    setFilter]   = useState("all");
   const [saved,     setSaved]    = useState(false);
   const [prices,    setPrices]   = useState({});
@@ -2021,20 +2024,20 @@ function DeliveryTracker({ state, dispatch }) {
   });
 
   const addDelivery = () => {
-    if(!form.driverId||!form.qty){ alert("Select a driver and enter a quantity."); return; }
-    const driver = drivers.find(d=>d.id===Number(form.driverId));
+    if(!driverId||!qty){ alert("Select a driver and enter a quantity."); return; }
+    const driver = drivers.find(d=>d.id===Number(driverId));
     dispatch({ type:"ADD_DELIVERY", delivery:{
-      id:Date.now(), driverId:Number(form.driverId),
-      driverName:driver?.name||"", date:form.date,
-      qty:Number(form.qty), notes:form.notes,
+      id:Date.now(), driverId:Number(driverId),
+      driverName:driver?.name||"", date,
+      qty:Number(qty), notes,
       recordedBy:state.currentUser.name
     }});
-    setForm(f=>({...f,driverId:"",qty:1,notes:""}));
+    setDriverId(""); setQty(1); setNotes("");
     setSaved(true); setTimeout(()=>setSaved(false),2500);
   };
 
   const tabBtn = (key,label) => (
-    <button onClick={()=>setTab(key)} style={{
+    <button key={key} onClick={()=>setTab(key)} style={{
       padding:"8px 18px", borderRadius:20, border:"none", cursor:"pointer",
       fontWeight:700, fontSize:12,
       background: tab===key ? C.orange : C.gray100,
@@ -2042,29 +2045,30 @@ function DeliveryTracker({ state, dispatch }) {
     }}>{label}</button>
   );
 
-  const AddForm = () => (
+  // ── ADD DELIVERY FORM JSX (inline, not a sub-component) ───────────────────
+  const addFormJSX = (
     <div style={{ ...S.card, padding:"24px 28px", marginBottom:24 }}>
-      <div style={{ fontWeight:800, fontSize:14, color:C.gray800, marginBottom:16 }}>+ Record Deliveries</div>
-      {saved && <div style={{ background:C.greenL, color:C.green, borderRadius:9, padding:"10px 14px", marginBottom:14, fontWeight:700 }}>Delivery recorded!</div>}
+      <div style={{ fontWeight:800, fontSize:14, color:C.gray800, marginBottom:16 }}>➕ Record Deliveries</div>
+      {saved && <div style={{ background:C.greenL, color:C.green, borderRadius:9, padding:"10px 14px", marginBottom:14, fontWeight:700 }}>✅ Delivery recorded successfully!</div>}
       {drivers.length===0 ? (
         <div style={{ color:C.gray400, fontSize:13 }}>No drivers available. Ask the manager to add a driver account.</div>
       ) : (
         <>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:14, marginBottom:16 }}>
             <Field label="Driver">
-              <select style={S.input} value={form.driverId} onChange={e=>setForm(f=>({...f,driverId:e.target.value}))}>
-                <option value="">Select driver</option>
+              <select style={S.input} value={driverId} onChange={e=>setDriverId(e.target.value)}>
+                <option value="">— Select driver —</option>
                 {drivers.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             </Field>
             <Field label="Date">
-              <input style={S.input} type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} />
+              <input style={S.input} type="date" value={date} onChange={e=>setDate(e.target.value)} />
             </Field>
             <Field label="Qty of Deliveries">
-              <input style={S.input} type="number" min="1" value={form.qty} onChange={e=>setForm(f=>({...f,qty:e.target.value}))} />
+              <input style={S.input} type="number" min="1" value={qty} onChange={e=>setQty(e.target.value)} />
             </Field>
             <Field label="Notes (optional)">
-              <input style={S.input} value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="e.g. Zone A" />
+              <input style={S.input} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="e.g. Zone A" />
             </Field>
           </div>
           <button style={{ ...S.btn(), padding:"11px 32px", fontSize:14 }} onClick={addDelivery}>Add</button>
@@ -2073,10 +2077,11 @@ function DeliveryTracker({ state, dispatch }) {
     </div>
   );
 
-  const DeliveryLog = () => (
+  // ── DELIVERY LOG JSX (inline) ─────────────────────────────────────────────
+  const logJSX = (
     <div style={S.card}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
-        <div style={{ fontWeight:800, fontSize:14, color:C.gray800 }}>Delivery Log</div>
+        <div style={{ fontWeight:800, fontSize:14, color:C.gray800 }}>📋 Delivery Log</div>
         <select style={{ ...S.input, width:200 }} value={filter} onChange={e=>setFilter(e.target.value)}>
           <option value="all">All Drivers</option>
           {drivers.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
@@ -2101,22 +2106,25 @@ function DeliveryTracker({ state, dispatch }) {
     </div>
   );
 
+  // ── TEAM LEAD VIEW ────────────────────────────────────────────────────────
   if(isTL) return (
     <div>
-      <PageHeader title="Deliveries" />
+      <PageHeader title="🚗 Deliveries" />
       <div style={{ display:"flex", gap:8, marginBottom:20, background:C.gray50, padding:4, borderRadius:24, width:"fit-content", border:`1px solid ${C.gray200}` }}>
-        <button onClick={()=>setTab("add")} style={{ padding:"8px 18px", borderRadius:20, border:"none", cursor:"pointer", fontWeight:700, fontSize:12, background:tab==="add"?C.orange:C.gray100, color:tab==="add"?"#fff":C.gray600 }}>+ Add Delivery</button>
-        <button onClick={()=>setTab("log")} style={{ padding:"8px 18px", borderRadius:20, border:"none", cursor:"pointer", fontWeight:700, fontSize:12, background:tab==="log"?C.orange:C.gray100, color:tab==="log"?"#fff":C.gray600 }}>Delivery Log</button>
+        {tabBtn("add","➕ Add Delivery")}
+        {tabBtn("log","📋 Delivery Log")}
       </div>
-      {tab==="add" && <AddForm />}
-      {tab==="log" && <DeliveryLog />}
+      {tab==="add" && addFormJSX}
+      {tab==="log" && logJSX}
     </div>
   );
 
+  // ── MANAGER VIEW ──────────────────────────────────────────────────────────
   return (
     <div>
-      <PageHeader title="Delivery Tracking" />
+      <PageHeader title="🚗 Delivery Tracking" />
 
+      {/* Driver Summary Cards */}
       {drivers.length>0 && (
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(230px,1fr))", gap:14, marginBottom:24 }}>
           {summary.map(d=>(
@@ -2125,7 +2133,7 @@ function DeliveryTracker({ state, dispatch }) {
                 <Avatar name={d.name} role="driver" size={40} />
                 <div>
                   <div style={{ fontWeight:800, fontSize:14 }}>{d.name}</div>
-                  <div style={{ fontSize:11, color:C.yellow, fontWeight:700 }}>Driver</div>
+                  <div style={{ fontSize:11, color:C.yellow, fontWeight:700 }}>🚗 Driver</div>
                 </div>
               </div>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
@@ -2141,7 +2149,7 @@ function DeliveryTracker({ state, dispatch }) {
               {d.price>0 && (
                 <div style={{ background:C.greenL, borderRadius:8, padding:"8px 12px", textAlign:"center" }}>
                   <div style={{ fontSize:17, fontWeight:900, color:C.green }}>{fmtCurrency(d.amountDue)}</div>
-                  <div style={{ fontSize:10, color:C.green, fontWeight:700 }}>PAY DUE ({d.biweekly} x RD${d.price})</div>
+                  <div style={{ fontSize:10, color:C.green, fontWeight:700 }}>PAY DUE ({d.biweekly} × RD${d.price})</div>
                 </div>
               )}
             </div>
@@ -2149,19 +2157,20 @@ function DeliveryTracker({ state, dispatch }) {
         </div>
       )}
 
+      {/* Tab Nav */}
       <div style={{ display:"flex", gap:8, marginBottom:20, background:C.gray50, padding:4, borderRadius:24, width:"fit-content", border:`1px solid ${C.gray200}` }}>
-        {tabBtn("log",     "Delivery Log")}
-        {tabBtn("add",     "+ Add Delivery")}
-        {tabBtn("config",  "Driver Prices")}
-        {tabBtn("payroll", "Pay Summary")}
+        {tabBtn("log",     "📋 Delivery Log")}
+        {tabBtn("add",     "➕ Add Delivery")}
+        {tabBtn("config",  "⚙️ Driver Prices")}
+        {tabBtn("payroll", "💰 Pay Summary")}
       </div>
 
-      {tab==="log"     && <DeliveryLog />}
-      {tab==="add"     && <AddForm />}
+      {tab==="log" && logJSX}
+      {tab==="add" && addFormJSX}
 
       {tab==="config" && (
         <div style={S.card}>
-          <div style={{ fontWeight:800, fontSize:14, marginBottom:6 }}>Driver Price Configuration</div>
+          <div style={{ fontWeight:800, fontSize:14, marginBottom:6 }}>⚙️ Driver Price Configuration</div>
           <div style={{ fontSize:13, color:C.gray500, marginBottom:20 }}>Set how much each driver earns per delivery (RD$).</div>
           {drivers.length===0 ? (
             <div style={{ color:C.gray400, textAlign:"center", padding:32 }}>No drivers found.</div>
@@ -2176,7 +2185,8 @@ function DeliveryTracker({ state, dispatch }) {
                       <span style={{ fontSize:12, color:C.gray500 }}>RD$/delivery:</span>
                       <input style={{ ...S.input, width:90, padding:"6px 10px" }} type="number" min="0"
                         value={editPrice[d.id]!==undefined?editPrice[d.id]:(prices[d.id]||"")}
-                        onChange={e=>setEditPrice(p=>({...p,[d.id]:e.target.value}))} placeholder="0" />
+                        onChange={e=>setEditPrice(p=>({...p,[d.id]:e.target.value}))}
+                        placeholder="0" />
                       <button style={S.btnSm(C.tealL,C.teal)} onClick={()=>{
                         savePrices({...prices,[d.id]:Number(editPrice[d.id]||prices[d.id]||0)});
                         setEditPrice(p=>{const n={...p};delete n[d.id];return n;});
@@ -2196,26 +2206,32 @@ function DeliveryTracker({ state, dispatch }) {
 
       {tab==="payroll" && (
         <div style={S.card}>
-          <div style={{ fontWeight:800, fontSize:14, marginBottom:6 }}>Bi-Weekly Pay Summary</div>
-          <div style={{ fontSize:13, color:C.gray500, marginBottom:20 }}>Deliveries in last 14 days x price per delivery.</div>
-          <table style={{ width:"100%", borderCollapse:"collapse", marginBottom:20 }}>
-            <thead><tr>{["Driver","Rate/Delivery","Deliveries (14d)","Total Pay","Status"].map((h,i)=><th key={i} style={S.th}>{h}</th>)}</tr></thead>
-            <tbody>
-              {summary.map(d=>(
-                <tr key={d.id}>
-                  <td style={S.td}><div style={{ display:"flex", alignItems:"center", gap:10 }}><Avatar name={d.name} role="driver" size={28} /><b>{d.name}</b></div></td>
-                  <td style={S.td}>{d.price>0?fmtCurrency(d.price):<span style={{ color:C.red }}>Not set</span>}</td>
-                  <td style={S.td}><b style={{ fontSize:16, color:C.orange }}>{d.biweekly}</b></td>
-                  <td style={S.td}><b style={{ fontSize:15, color:C.green }}>{fmtCurrency(d.amountDue)}</b></td>
-                  <td style={S.td}>{d.price===0?<span style={{ ...S.badge(C.redL,C.red) }}>Price not set</span>:<span style={{ ...S.badge(C.greenL,C.green) }}>Ready</span>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div style={{ background:C.gray50, borderRadius:10, padding:"14px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-            <div style={{ fontWeight:800, fontSize:14, color:C.gray700 }}>Total Bi-Weekly Payout</div>
-            <div style={{ fontSize:24, fontWeight:900, color:C.green }}>{fmtCurrency(summary.reduce((s,d)=>s+d.amountDue,0))}</div>
-          </div>
+          <div style={{ fontWeight:800, fontSize:14, marginBottom:6 }}>💰 Bi-Weekly Pay Summary</div>
+          <div style={{ fontSize:13, color:C.gray500, marginBottom:20 }}>Deliveries in last 14 days × price per delivery.</div>
+          {drivers.length===0 ? (
+            <div style={{ color:C.gray400, textAlign:"center", padding:32 }}>No drivers found.</div>
+          ) : (
+            <>
+              <table style={{ width:"100%", borderCollapse:"collapse", marginBottom:20 }}>
+                <thead><tr>{["Driver","Rate/Delivery","Deliveries (14d)","Total Pay","Status"].map((h,i)=><th key={i} style={S.th}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {summary.map(d=>(
+                    <tr key={d.id}>
+                      <td style={S.td}><div style={{ display:"flex", alignItems:"center", gap:10 }}><Avatar name={d.name} role="driver" size={28} /><b>{d.name}</b></div></td>
+                      <td style={S.td}>{d.price>0?fmtCurrency(d.price):<span style={{ color:C.red }}>Not set</span>}</td>
+                      <td style={S.td}><b style={{ fontSize:16, color:C.orange }}>{d.biweekly}</b></td>
+                      <td style={S.td}><b style={{ fontSize:15, color:C.green }}>{fmtCurrency(d.amountDue)}</b></td>
+                      <td style={S.td}>{d.price===0?<span style={{ ...S.badge(C.redL,C.red) }}>Price not set</span>:<span style={{ ...S.badge(C.greenL,C.green) }}>Ready</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div style={{ background:C.gray50, borderRadius:10, padding:"14px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <div style={{ fontWeight:800, fontSize:14, color:C.gray700 }}>💰 Total Bi-Weekly Payout</div>
+                <div style={{ fontSize:24, fontWeight:900, color:C.green }}>{fmtCurrency(summary.reduce((s,d)=>s+d.amountDue,0))}</div>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
