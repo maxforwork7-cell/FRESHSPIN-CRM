@@ -2114,19 +2114,13 @@ function DeliveryTracker({ state, dispatch }) {
   const currentRole = state.currentUser.role;
   const isManager = currentRole==="manager"||currentRole==="owner";
   const isTeamLead = currentRole==="team_lead";
-  const canAdd = isManager || isTeamLead;
   const [form, setForm] = useState({ driverId:"", date:today(), qty:1, notes:"" });
   const [filter, setFilter] = useState("all");
 
   const drivers = state.users.filter(u=>u.role==="driver" && u.active!==false);
   const deliveries = state.deliveries || [];
+  const filtered = deliveries.filter(d => filter==="all" ? true : d.driverId===Number(filter));
 
-  const filtered = deliveries.filter(d => {
-    if (filter==="all") return true;
-    return d.driverId === Number(filter);
-  });
-
-  // Summary only for managers
   const summary = drivers.map(d => {
     const dDeliveries = deliveries.filter(x=>x.driverId===d.id);
     const total = dDeliveries.reduce((s,x)=>s+x.qty,0);
@@ -2141,56 +2135,87 @@ function DeliveryTracker({ state, dispatch }) {
     const driver = drivers.find(d=>d.id===Number(form.driverId));
     dispatch({ type:"ADD_DELIVERY", delivery:{ id:Date.now(), driverId:Number(form.driverId), driverName:driver?.name||"", date:form.date, qty:Number(form.qty), notes:form.notes, recordedBy:state.currentUser.name } });
     setForm(f=>({...f, driverId:"", qty:1, notes:""}));
+    alert("✅ Delivery recorded successfully!");
   };
 
+  // ── TEAM LEAD VIEW — Only the record form ──────────────────────────────────
+  if (isTeamLead) {
+    return (
+      <div>
+        <PageHeader title="🚗 Record Deliveries" />
+        {drivers.length === 0 ? (
+          <div style={{ ...S.card, padding:32, textAlign:"center", color:C.gray400 }}>
+            No drivers available yet. Ask your manager to add a driver.
+          </div>
+        ) : (
+          <div style={{ ...S.card, padding:"28px 28px" }}>
+            <div style={{ fontSize:13, color:C.gray500, marginBottom:20 }}>
+              Record deliveries completed by a driver. Your manager will review the log.
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:16 }}>
+              <Field label="Driver">
+                <select style={S.input} value={form.driverId} onChange={e=>setForm(f=>({...f,driverId:e.target.value}))}>
+                  <option value="">— Select driver —</option>
+                  {drivers.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Date">
+                <input style={S.input} type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} />
+              </Field>
+              <Field label="Qty of Deliveries">
+                <input style={S.input} type="number" min="1" value={form.qty} onChange={e=>setForm(f=>({...f,qty:e.target.value}))} />
+              </Field>
+              <Field label="Notes (optional)">
+                <input style={S.input} value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="e.g. Zone A deliveries" />
+              </Field>
+            </div>
+            <button style={{ ...S.btn(), width:"100%", justifyContent:"center", padding:"12px 0", fontSize:15 }} onClick={addDelivery}>
+              ➕ Record Delivery
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── MANAGER VIEW — Full dashboard ──────────────────────────────────────────
   return (
     <div>
       <PageHeader title="🚗 Delivery Tracking" />
 
-      {/* MANAGER ONLY — Driver summary cards with totals */}
-      {isManager && (
-        <>
-          {drivers.length>0 ? (
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))", gap:14, marginBottom:24 }}>
-              {summary.map(d=>(
-                <div key={d.id} style={{ ...S.card, padding:"18px 20px" }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
-                    <Avatar name={d.name} role="driver" size={38} />
-                    <div>
-                      <div style={{ fontWeight:800, fontSize:14, color:C.gray900 }}>{d.name}</div>
-                      <div style={{ fontSize:11, color:C.yellow, fontWeight:700 }}>🚗 Driver</div>
-                    </div>
-                  </div>
-                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-                    <div style={{ background:C.tealL, borderRadius:8, padding:"8px 12px", textAlign:"center" }}>
-                      <div style={{ fontSize:22, fontWeight:900, color:C.teal }}>{d.total}</div>
-                      <div style={{ fontSize:10, color:C.teal, fontWeight:700 }}>TOTAL</div>
-                    </div>
-                    <div style={{ background:C.orangeL, borderRadius:8, padding:"8px 12px", textAlign:"center" }}>
-                      <div style={{ fontSize:22, fontWeight:900, color:C.orange }}>{d.biweekly}</div>
-                      <div style={{ fontSize:10, color:C.orange, fontWeight:700 }}>BI-WEEKLY</div>
-                    </div>
-                  </div>
+      {/* Driver summary cards */}
+      {drivers.length>0 ? (
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))", gap:14, marginBottom:24 }}>
+          {summary.map(d=>(
+            <div key={d.id} style={{ ...S.card, padding:"18px 20px" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+                <Avatar name={d.name} role="driver" size={38} />
+                <div>
+                  <div style={{ fontWeight:800, fontSize:14, color:C.gray900 }}>{d.name}</div>
+                  <div style={{ fontSize:11, color:C.yellow, fontWeight:700 }}>🚗 Driver</div>
                 </div>
-              ))}
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                <div style={{ background:C.tealL, borderRadius:8, padding:"8px 12px", textAlign:"center" }}>
+                  <div style={{ fontSize:22, fontWeight:900, color:C.teal }}>{d.total}</div>
+                  <div style={{ fontSize:10, color:C.teal, fontWeight:700 }}>TOTAL</div>
+                </div>
+                <div style={{ background:C.orangeL, borderRadius:8, padding:"8px 12px", textAlign:"center" }}>
+                  <div style={{ fontSize:22, fontWeight:900, color:C.orange }}>{d.biweekly}</div>
+                  <div style={{ fontSize:10, color:C.orange, fontWeight:700 }}>BI-WEEKLY</div>
+                </div>
+              </div>
             </div>
-          ) : (
-            <div style={{ ...S.card, padding:32, textAlign:"center", color:C.gray400, marginBottom:24 }}>
-              No drivers found. Add an employee with the <b>Driver</b> role first.
-            </div>
-          )}
-        </>
-      )}
-
-      {/* TEAM LEAD — Simple driver list, no pay info */}
-      {isTeamLead && drivers.length===0 && (
+          ))}
+        </div>
+      ) : (
         <div style={{ ...S.card, padding:32, textAlign:"center", color:C.gray400, marginBottom:24 }}>
-          No drivers available yet.
+          No drivers found. Add an employee with the <b>Driver</b> role first.
         </div>
       )}
 
-      {/* ADD DELIVERY FORM — Manager & Team Lead */}
-      {canAdd && drivers.length>0 && (
+      {/* Record deliveries form */}
+      {drivers.length>0 && (
         <div style={{ ...S.card, padding:"20px 24px", marginBottom:24 }}>
           <div style={{ fontWeight:800, fontSize:14, color:C.gray800, marginBottom:14 }}>➕ Record Deliveries</div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr auto", gap:12, alignItems:"end" }}>
@@ -2214,7 +2239,7 @@ function DeliveryTracker({ state, dispatch }) {
         </div>
       )}
 
-      {/* DELIVERY LOG */}
+      {/* Delivery log */}
       <div style={S.card}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14, padding:"0 4px" }}>
           <div style={{ fontWeight:800, fontSize:14, color:C.gray800 }}>📋 Delivery Log</div>
@@ -2225,7 +2250,7 @@ function DeliveryTracker({ state, dispatch }) {
         </div>
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
           <thead>
-            <tr>{["Driver","Date","Deliveries","Notes","Recorded By", isManager?"":""].map((h,i)=><th key={i} style={S.th}>{h}</th>)}</tr>
+            <tr>{["Driver","Date","Deliveries","Notes","Recorded By",""].map((h,i)=><th key={i} style={S.th}>{h}</th>)}</tr>
           </thead>
           <tbody>
             {[...filtered].reverse().map(d=>(
@@ -2235,11 +2260,9 @@ function DeliveryTracker({ state, dispatch }) {
                 <td style={S.td}><b style={{ color:C.orange, fontSize:16 }}>{d.qty}</b></td>
                 <td style={S.td}>{d.notes||"—"}</td>
                 <td style={S.td}>{d.recordedBy}</td>
-                {isManager && (
-                  <td style={S.td}>
-                    <button style={S.btnSm(C.redL,C.red)} onClick={()=>dispatch({type:"DELETE_DELIVERY",id:d.id})}>Del</button>
-                  </td>
-                )}
+                <td style={S.td}>
+                  <button style={S.btnSm(C.redL,C.red)} onClick={()=>dispatch({type:"DELETE_DELIVERY",id:d.id})}>Del</button>
+                </td>
               </tr>
             ))}
             {filtered.length===0 && <tr><td colSpan={6} style={{ ...S.td, textAlign:"center", color:C.gray400, padding:24 }}>No deliveries recorded yet.</td></tr>}
