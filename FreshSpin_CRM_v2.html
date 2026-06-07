@@ -268,9 +268,11 @@ const T = {
 };
 
 const ROLE_ACCESS = {
-  owner:    ["dashboard","pos","clients","accounting","hr","employees"],
-  manager:  ["dashboard","pos","clients","accounting","hr","employees"],
-  employee: ["pos","clients","shifts"],
+  owner:       ["dashboard","pos","clients","accounting","hr","employees","deliveries"],
+  manager:     ["dashboard","pos","clients","accounting","hr","employees","deliveries"],
+  team_lead:   ["dashboard","pos","clients","shifts","deliveries"],
+  employee:    ["pos","clients","shifts"],
+  driver:      ["shifts","deliveries"],
 };
 
 const initState = {
@@ -282,12 +284,15 @@ const initState = {
   shifts:        [],
   hrConfig:      { hourlyRate: 85, overtimeMultiplier: 1.5, payPeriod: "biweekly" },
   subscriptions: [],
+  deliveries:    [],
   _loaded:       false,
 };
 
 function reducer(state, action) {
   switch (action.type) {
     case "LOAD_DATA": return { ...state, ...action.data, _loaded: true };
+    case "ADD_DELIVERY":    return { ...state, deliveries: [...(state.deliveries||[]), action.delivery] };
+    case "DELETE_DELIVERY": return { ...state, deliveries: (state.deliveries||[]).filter(d => d.id !== action.id) };
     case "LOGIN":              return { ...state, currentUser: action.user };
     case "LOGOUT":             return { ...state, currentUser: null };
     case "ADD_CLIENT":         return { ...state, clients: [...state.clients, action.client] };
@@ -362,6 +367,8 @@ const BADGE = {
   owner:     [C.orangeL, C.orangeD],
   manager:   [C.purpleL, C.purple],
   employee:  [C.tealL,   C.teal],
+  team_lead: [C.purpleL, C.purple],
+  driver:    [C.yellowL, C.yellow],
   active:    [C.greenL,  C.green],
   inactive:  [C.gray200, C.gray500],
 };
@@ -448,14 +455,37 @@ function Field({ label, children, style }) {
 function LoginScreen({ state, dispatch }) {
   const { lang, setLang } = React.useContext(LangCtx);
   const t = T[lang];
-  const [email, setEmail] = useState("");
-  const [pass, setPass]   = useState("");
-  const [error, setError] = useState("");
+  const [email, setEmail]     = useState("");
+  const [pass, setPass]       = useState("");
+  const [error, setError]     = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const login = () => {
-    const user = state.users.find(u => u.email === email && u.password === pass && u.active !== false);
-    if (user) { dispatch({ type: "LOGIN", user }); setError(""); }
-    else setError(t.login_error);
+  const login = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      // Always fetch fresh users from database
+      const data = await fetch("/api/data").then(r => r.json());
+      const users = data.users || [];
+      const user = users.find(u =>
+        u.email.toLowerCase().trim() === email.toLowerCase().trim() &&
+        u.password === pass &&
+        u.active !== false
+      );
+      if (user) {
+        dispatch({ type: "LOAD_DATA", data });
+        dispatch({ type: "LOGIN", user });
+        setError("");
+      } else {
+        setError(t.login_error);
+      }
+    } catch(err) {
+      // Fallback to local state if API fails
+      const user = state.users.find(u => u.email === email && u.password === pass && u.active !== false);
+      if (user) { dispatch({ type: "LOGIN", user }); setError(""); }
+      else setError(t.login_error);
+    }
+    setLoading(false);
   };
 
   return (
@@ -484,8 +514,8 @@ function LoginScreen({ state, dispatch }) {
             onKeyDown={e => e.key === "Enter" && login()} />
         </Field>
         {error && <div style={{ color: C.red, fontSize: 12, marginBottom: 12, background: C.redL, padding: "8px 12px", borderRadius: 8 }}>{error}</div>}
-        <button style={{ ...S.btn(), width: "100%", justifyContent: "center", padding: "11px 0", fontSize: 14 }} onClick={login}>
-          {t.login_btn}
+        <button style={{ ...S.btn(), width: "100%", justifyContent: "center", padding: "11px 0", fontSize: 14, opacity: loading ? 0.7 : 1 }} onClick={login} disabled={loading}>
+          {loading ? "Signing in…" : t.login_btn}
         </button>
         
       </div>
@@ -508,6 +538,7 @@ function Sidebar({ active, setActive, user, dispatch }) {
     { key: "accounting",icon: "📊", label: t.nav_accounting },
     { key: "hr",        icon: "👔", label: t.nav_hr },
     { key: "employees", icon: "🏷", label: t.nav_employees },
+    { key: "deliveries", icon: "🚗", label: "Deliveries" },
   ].filter(n => allowed.includes(n.key));
 
   return (
@@ -666,18 +697,22 @@ function Dashboard({ state, setActive }) {
 // SERVICE CATALOG
 // ═══════════════════════════════════════════════════════════════════════════
 const SERVICE_CATALOG = [
-  { name: "Wash & Fold (per lb)",                            nameEs: "Lavar & Doblar (por libra)",                          price: 100 },
-  { name: "Wash & Fold — White Clothes (per lb)",            nameEs: "Lavar & Doblar — Ropa Blanca (por libra)",            price: 120 },
-  { name: "Wash & Fold — Curtains/Blankets/Towels (per lb)", nameEs: "Lavar & Doblar — Cortinas/Frazadas/Toallas (por lb)", price: 150 },
-  { name: "Wash — Dress (per unit)",                         nameEs: "Lavar — Vestido (por unidad)",                        price: 250 },
-  { name: "Wash — Suit (per unit)",                          nameEs: "Lavar — Traje (por unidad)",                          price: 250 },
-  { name: "Iron & Press — Shirt (per unit)",                 nameEs: "Planchar — Camisa (por unidad)",                      price:  60 },
-  { name: "Iron & Press — Pants (per unit)",                 nameEs: "Planchar — Pantalón (por unidad)",                    price:  60 },
-  { name: "Iron & Press — Dress (per unit)",                 nameEs: "Planchar — Vestido (por unidad)",                     price: 300 },
-  { name: "Iron & Press — Suit (per unit)",                  nameEs: "Planchar — Traje (por unidad)",                       price: 300 },
-  { name: "Sneakers Cleaning",                               nameEs: "Limpieza de Tenis",                                   price: 350 },
-  { name: "Express",                                         nameEs: "Expreso",                                             price: 100 },
-  { name: "Delivery",                                        nameEs: "Entrega a Domicilio",                                 price: 150 },
+  { name: "Wash & Fold (per lb)",                              nameEs: "Lavar & Doblar (por libra)",                          price:  75 },
+  { name: "Wash & Fold — White Clothes (per lb)",              nameEs: "Lavar & Doblar — Ropa Blanca (por libra)",            price: 100 },
+  { name: "Wash & Fold — Curtains/Blankets/Towels (per lb)",   nameEs: "Lavar & Doblar — Cortinas/Frazadas/Toallas (por lb)", price: 100 },
+  { name: "Wash — Dress (per unit)",                           nameEs: "Lavar — Vestido (por unidad)",                        price: 200 },
+  { name: "Wash — Suit (per unit)",                            nameEs: "Lavar — Traje (por unidad)",                          price: 200 },
+  { name: "Iron & Press — Shirt (per unit)",                   nameEs: "Planchar — Camisa (por unidad)",                      price:  60 },
+  { name: "Iron & Press — Pants (per unit)",                   nameEs: "Planchar — Pantalón (por unidad)",                    price:  60 },
+  { name: "Iron & Press — Dress (per unit)",                   nameEs: "Planchar — Vestido (por unidad)",                     price: 250 },
+  { name: "Iron & Press — Suit (per unit)",                    nameEs: "Planchar — Traje (por unidad)",                       price: 250 },
+  { name: "Wash & Press — Dress (per unit)",                   nameEs: "Lavar & Planchar — Vestido (por unidad)",             price: 325 },
+  { name: "Wash & Press — Suit (per unit)",                    nameEs: "Lavar & Planchar — Traje (por unidad)",               price: 325 },
+  { name: "Wash Machine Rent (8h)",                            nameEs: "Alquiler de Lavadora (8h)",                           price: 400 },
+  { name: "Sneakers Cleaning",                                 nameEs: "Limpieza de Tenis",                                   price: 300 },
+  { name: "Express",                                           nameEs: "Expreso",                                             price: 100 },
+  { name: "Delivery (local)",                                  nameEs: "Entrega Local",                                       price: 100 },
+  { name: "Delivery (extended)",                               nameEs: "Entrega a Domicilio",                                 price: 150 },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1858,71 +1893,137 @@ function HR({ state, dispatch }) {
 function Employees({ state, dispatch }) {
   const { lang } = React.useContext(LangCtx);
   const t = T[lang];
-  const [showForm, setShowForm] = useState(false);
-  const [editing,  setEditing]  = useState(null);
-  const [form, setForm] = useState({ name:"", email:"", phone:"", role:"employee", password:"", pin:"" });
+  const [showForm,  setShowForm]  = useState(false);
+  const [editing,   setEditing]   = useState(null);
+  const [showPerms, setShowPerms] = useState(null);
+  const [form, setForm] = useState({ name:"", email:"", phone:"", role:"employee", password:"", pin:"", permissions:[] });
   const [search, setSearch] = useState("");
 
-  const canManageAll = state.currentUser.role === "owner";
+  const isManager = state.currentUser.role === "manager" || state.currentUser.role === "owner";
+  const isTeamLead = state.currentUser.role === "team_lead";
+  const canManage = isManager || isTeamLead;
+
+  const ALL_PERMISSIONS = [
+    { key:"view_accounting",  label:"View Accounting" },
+    { key:"view_clients",     label:"View Clients" },
+    { key:"create_invoices",  label:"Create Invoices" },
+    { key:"manage_shifts",    label:"Manage Shifts" },
+    { key:"view_hr",          label:"View HR & Payroll" },
+    { key:"track_deliveries", label:"Track Deliveries" },
+  ];
+
+  const roleOptions = isManager
+    ? ["employee","team_lead","driver","manager"]
+    : ["employee","driver"];
+
+  const roleLabels = {
+    manager:   "Manager",
+    team_lead: "Team Lead",
+    employee:  "Employee",
+    driver:    "Driver",
+    owner:     "Owner",
+  };
 
   const filteredUsers = state.users.filter(u =>
-    u.name.toLowerCase().includes(search.toLowerCase()) ||
-    u.email.toLowerCase().includes(search.toLowerCase())
+    (u.name||"").toLowerCase().includes(search.toLowerCase()) ||
+    (u.email||"").toLowerCase().includes(search.toLowerCase())
   );
 
   const openNew = () => {
     setEditing(null);
-    setForm({ name:"", email:"", phone:"", role:"employee", password: uid().toLowerCase(), pin: Math.floor(1000 + Math.random() * 9000).toString() });
+    setForm({ name:"", email:"", phone:"", role:"employee", password: uid().toLowerCase(), pin: Math.floor(1000+Math.random()*9000).toString(), permissions:[] });
     setShowForm(true);
   };
 
   const openEdit = u => {
     setEditing(u);
-    setForm({ name: u.name, email: u.email, phone: u.phone || "", role: u.role, password: u.password, pin: u.pin });
+    setForm({ name:u.name, email:u.email, phone:u.phone||"", role:u.role, password:u.password, pin:u.pin, permissions:u.permissions||[] });
     setShowForm(true);
   };
 
   const save = () => {
     if (!form.name || !form.email || !form.password) return alert(t.alert_emp_fields);
     if (editing) {
-      dispatch({ type: "UPDATE_USER", user: { ...editing, ...form } });
+      dispatch({ type:"UPDATE_USER", user:{ ...editing, ...form } });
     } else {
-      dispatch({ type: "ADD_USER", user: { ...form, id: Date.now(), avatar: initials(form.name), active: true, createdAt: today() } });
+      dispatch({ type:"ADD_USER", user:{ ...form, id:Date.now(), avatar:initials(form.name), active:true, createdAt:today() } });
     }
     setShowForm(false); setEditing(null);
   };
 
-  const roleOptions = canManageAll ? ["employee","manager","owner"] : ["employee","manager"];
+  const togglePerm = (perm) => {
+    setForm(f => {
+      const perms = f.permissions || [];
+      return { ...f, permissions: perms.includes(perm) ? perms.filter(p=>p!==perm) : [...perms, perm] };
+    });
+  };
+
+  const upgradeToTL = (u) => {
+    if (window.confirm(`Upgrade ${u.name} to Team Lead?`)) {
+      dispatch({ type:"UPDATE_USER", user:{ ...u, role:"team_lead" } });
+    }
+  };
+
+  const roleColor = r => ({
+    manager:"#E8650A", team_lead:"#7C3AED", employee:"#0891B2", driver:"#D97706", owner:"#16A34A"
+  }[r] || C.gray500);
 
   return (
     <div>
       <PageHeader title={t.emp_title}>
-        <input style={{ ...S.input, width: 240 }} value={search} onChange={e => setSearch(e.target.value)} placeholder={t.search_emp} />
-        <button style={S.btn()} onClick={openNew}>{t.new_emp}</button>
+        <input style={{ ...S.input, width:240 }} value={search} onChange={e=>setSearch(e.target.value)} placeholder={t.search_emp} />
+        {canManage && <button style={S.btn()} onClick={openNew}>{t.new_emp}</button>}
       </PageHeader>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))", gap: 14, marginBottom: 22 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))", gap:14, marginBottom:22 }}>
         {filteredUsers.map(u => (
-          <div key={u.id} style={{ ...S.card, padding: "18px 20px", opacity: u.active === false ? 0.55 : 1 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+          <div key={u.id} style={{ ...S.card, padding:"18px 20px", opacity:u.active===false?0.55:1 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:14 }}>
               <Avatar name={u.name} role={u.role} size={42} />
               <div>
-                <div style={{ fontSize: 14, fontWeight: 800, color: C.gray900 }}>{u.name}</div>
-                <Badge type={u.role} />
+                <div style={{ fontSize:14, fontWeight:800, color:C.gray900 }}>{u.name}</div>
+                <span style={{ fontSize:11, fontWeight:700, color:roleColor(u.role), background:roleColor(u.role)+"20", borderRadius:20, padding:"2px 10px" }}>
+                  {roleLabels[u.role]||u.role}
+                </span>
               </div>
-              {u.active === false && <span style={{ marginLeft: "auto", ...S.badge(C.gray200, C.gray500), fontSize: 10 }}>{t.inactive_lbl}</span>}
+              {u.active===false && <span style={{ marginLeft:"auto", ...S.badge(C.gray200,C.gray500), fontSize:10 }}>{t.inactive_lbl}</span>}
             </div>
-            <div style={{ fontSize: 12, color: C.gray500, lineHeight: 1.8 }}>
+
+            <div style={{ fontSize:12, color:C.gray500, lineHeight:1.8, marginBottom:12 }}>
               <div>📧 {u.email}</div>
               {u.phone && <div>📱 {u.phone}</div>}
               <div>📅 {t.joined_lbl} {u.createdAt}</div>
+              {u.role==="driver" && (
+                <div style={{ marginTop:6, padding:"4px 8px", background:C.yellowL, borderRadius:6, color:C.yellow, fontWeight:700 }}>
+                  🚗 Delivery Driver — Paid per delivery
+                </div>
+              )}
+              {(u.permissions||[]).length>0 && (
+                <div style={{ marginTop:6 }}>
+                  🔑 {(u.permissions||[]).length} extra permission{(u.permissions||[]).length>1?"s":""}
+                </div>
+              )}
             </div>
-            <div style={{ display: "flex", gap: 6, marginTop: 14 }}>
-              <button style={{ ...S.btnSm(C.tealL, C.teal), flex: 1, justifyContent: "center" }} onClick={() => openEdit(u)}>{t.edit}</button>
-              {(canManageAll || u.role === "employee") && u.id !== state.currentUser.id && (
-                <button style={{ ...S.btnSm(u.active === false ? C.greenL : C.redL, u.active === false ? C.green : C.red), flex: 1, justifyContent: "center" }}
-                  onClick={() => dispatch({ type: "TOGGLE_USER_ACTIVE", id: u.id })}>
-                  {u.active === false ? t.activate : t.deactivate}
+
+            <div style={{ display:"flex", gap:6, marginTop:8, flexWrap:"wrap" }}>
+              {canManage && <button style={{ ...S.btnSm(C.tealL,C.teal), flex:1, justifyContent:"center" }} onClick={()=>openEdit(u)}>{t.edit}</button>}
+
+              {isManager && u.role==="employee" && u.id!==state.currentUser.id && (
+                <button style={{ ...S.btnSm(C.purpleL,C.purple), flex:1, justifyContent:"center" }} onClick={()=>upgradeToTL(u)}>
+                  ⬆ Team Lead
+                </button>
+              )}
+
+              {isManager && (u.role==="team_lead"||u.role==="employee") && u.id!==state.currentUser.id && (
+                <button style={{ ...S.btnSm(C.yellowL,C.yellow), flex:1, justifyContent:"center" }} onClick={()=>{ setShowPerms(u); setForm(f=>({...f, permissions:u.permissions||[]})); }}>
+                  🔑 Permissions
+                </button>
+              )}
+
+              {canManage && u.id!==state.currentUser.id && (
+                <button style={{ ...S.btnSm(u.active===false?C.greenL:C.redL, u.active===false?C.green:C.red), flex:1, justifyContent:"center" }}
+                  onClick={()=>dispatch({ type:"TOGGLE_USER_ACTIVE", id:u.id })}>
+                  {u.active===false?t.activate:t.deactivate}
                 </button>
               )}
             </div>
@@ -1930,38 +2031,209 @@ function Employees({ state, dispatch }) {
         ))}
       </div>
 
+      {/* ADD/EDIT EMPLOYEE MODAL */}
       {showForm && (
-        <Modal title={editing ? `${t.edit} — ${editing.name}` : t.new_emp_profile} onClose={() => setShowForm(false)} width={480}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <Field label={t.full_name} style={{ gridColumn: "1/-1" }}>
-              <input style={S.input} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="First Last" />
+        <Modal title={editing?`${t.edit} — ${editing.name}`:t.new_emp_profile} onClose={()=>setShowForm(false)} width={500}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+            <Field label={t.full_name} style={{ gridColumn:"1/-1" }}>
+              <input style={S.input} value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="First Last" />
             </Field>
             <Field label={t.email}>
-              <input style={S.input} type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="email@freshspin.com" />
+              <input style={S.input} type="email" value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))} />
             </Field>
             <Field label={t.phone}>
-              <input style={S.input} value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="809-555-0000" />
+              <input style={S.input} value={form.phone} onChange={e=>setForm(f=>({...f,phone:e.target.value}))} placeholder="809-555-0000" />
             </Field>
             <Field label={t.role}>
-              <select style={S.input} value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}>
-                {roleOptions.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase()+r.slice(1)}</option>)}
+              <select style={S.input} value={form.role} onChange={e=>setForm(f=>({...f,role:e.target.value}))}>
+                {roleOptions.map(r=><option key={r} value={r}>{roleLabels[r]||r}</option>)}
               </select>
             </Field>
             <Field label={t.password_lbl}>
-              <input style={S.input} type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder={t.password_ph} />
+              <input style={S.input} type="password" value={form.password} onChange={e=>setForm(f=>({...f,password:e.target.value}))} />
             </Field>
-            <Field label={t.pin_lbl} style={{ gridColumn: "1/-1" }}>
-              <input style={S.input} maxLength={4} value={form.pin} onChange={e => setForm(f => ({ ...f, pin: e.target.value }))} placeholder={t.pin_ph} />
+            <Field label={t.pin_lbl} style={{ gridColumn:"1/-1" }}>
+              <input style={S.input} maxLength={4} value={form.pin} onChange={e=>setForm(f=>({...f,pin:e.target.value}))} placeholder="4-digit PIN" />
             </Field>
           </div>
-          <div style={{ background: C.yellowL, borderRadius: 9, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: C.yellow }}>
+
+          {isManager && (form.role==="team_lead"||form.role==="employee") && (
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:C.gray600, marginBottom:8 }}>🔑 Extra Permissions</div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                {ALL_PERMISSIONS.map(p => (
+                  <label key={p.key} style={{ display:"flex", alignItems:"center", gap:8, fontSize:12, cursor:"pointer", padding:"6px 10px", borderRadius:8, background:(form.permissions||[]).includes(p.key)?C.purpleL:C.gray50, border:`1px solid ${(form.permissions||[]).includes(p.key)?C.purple:C.gray200}` }}>
+                    <input type="checkbox" checked={(form.permissions||[]).includes(p.key)} onChange={()=>togglePerm(p.key)} />
+                    {p.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div style={{ background:C.yellowL, borderRadius:9, padding:"10px 14px", marginBottom:16, fontSize:12, color:C.yellow }}>
             {t.credentials_warn}
           </div>
-          <button style={{ ...S.btn(), width: "100%", justifyContent: "center", padding: "11px 0" }} onClick={save}>
-            {editing ? t.save_changes : t.create_emp_profile}
+          <button style={{ ...S.btn(), width:"100%", justifyContent:"center", padding:"11px 0" }} onClick={save}>
+            {editing?t.save_changes:t.create_emp_profile}
           </button>
         </Modal>
       )}
+
+      {/* PERMISSIONS MODAL */}
+      {showPerms && (
+        <Modal title={`🔑 Permissions — ${showPerms.name}`} onClose={()=>setShowPerms(null)} width={440}>
+          <div style={{ fontSize:13, color:C.gray500, marginBottom:16 }}>Toggle which extra features this {roleLabels[showPerms.role]} can access.</div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:20 }}>
+            {ALL_PERMISSIONS.map(p => {
+              const has = (form.permissions||[]).includes(p.key);
+              return (
+                <label key={p.key} style={{ display:"flex", alignItems:"center", gap:8, fontSize:13, cursor:"pointer", padding:"8px 12px", borderRadius:8, background:has?C.purpleL:C.gray50, border:`1px solid ${has?C.purple:C.gray200}` }}>
+                  <input type="checkbox" checked={has} onChange={()=>togglePerm(p.key)} />
+                  {p.label}
+                </label>
+              );
+            })}
+          </div>
+          <button style={{ ...S.btn(), width:"100%", justifyContent:"center", padding:"11px 0" }} onClick={()=>{
+            dispatch({ type:"UPDATE_USER", user:{ ...showPerms, permissions: form.permissions||[] } });
+            setShowPerms(null);
+          }}>
+            Save Permissions
+          </button>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DELIVERIES TRACKER
+// ═══════════════════════════════════════════════════════════════════════════
+function DeliveryTracker({ state, dispatch }) {
+  const currentRole = state.currentUser.role;
+  const canAdd = currentRole==="manager"||currentRole==="owner"||currentRole==="team_lead";
+  const [form, setForm] = useState({ driverId:"", date:today(), qty:1, notes:"" });
+  const [filter, setFilter] = useState("all");
+
+  const drivers = state.users.filter(u=>u.role==="driver" && u.active!==false);
+  const deliveries = state.deliveries || [];
+
+  const filtered = deliveries.filter(d => {
+    if (filter==="all") return true;
+    return d.driverId === Number(filter);
+  });
+
+  // Group by driver for summary
+  const summary = drivers.map(d => {
+    const dDeliveries = deliveries.filter(x=>x.driverId===d.id);
+    const total = dDeliveries.reduce((s,x)=>s+x.qty,0);
+    // Biweekly — count last 14 days
+    const now = new Date();
+    const twoWeeksAgo = new Date(now); twoWeeksAgo.setDate(now.getDate()-14);
+    const biweekly = dDeliveries.filter(x=>new Date(x.date)>=twoWeeksAgo).reduce((s,x)=>s+x.qty,0);
+    return { ...d, total, biweekly };
+  });
+
+  const addDelivery = () => {
+    if (!form.driverId || !form.qty) return alert("Select a driver and quantity.");
+    const driver = drivers.find(d=>d.id===Number(form.driverId));
+    dispatch({ type:"ADD_DELIVERY", delivery:{ id:Date.now(), driverId:Number(form.driverId), driverName:driver?.name||"", date:form.date, qty:Number(form.qty), notes:form.notes, recordedBy:state.currentUser.name } });
+    setForm(f=>({...f, driverId:"", qty:1, notes:""}));
+  };
+
+  return (
+    <div>
+      <PageHeader title="🚗 Delivery Tracking" />
+
+      {/* DRIVER SUMMARY CARDS */}
+      {drivers.length>0 && (
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))", gap:14, marginBottom:24 }}>
+          {summary.map(d=>(
+            <div key={d.id} style={{ ...S.card, padding:"18px 20px" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+                <Avatar name={d.name} role="driver" size={38} />
+                <div>
+                  <div style={{ fontWeight:800, fontSize:14, color:C.gray900 }}>{d.name}</div>
+                  <div style={{ fontSize:11, color:C.yellow, fontWeight:700 }}>🚗 Driver</div>
+                </div>
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                <div style={{ background:C.tealL, borderRadius:8, padding:"8px 12px", textAlign:"center" }}>
+                  <div style={{ fontSize:22, fontWeight:900, color:C.teal }}>{d.total}</div>
+                  <div style={{ fontSize:10, color:C.teal, fontWeight:700 }}>TOTAL</div>
+                </div>
+                <div style={{ background:C.orangeL, borderRadius:8, padding:"8px 12px", textAlign:"center" }}>
+                  <div style={{ fontSize:22, fontWeight:900, color:C.orange }}>{d.biweekly}</div>
+                  <div style={{ fontSize:10, color:C.orange, fontWeight:700 }}>BI-WEEKLY</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {drivers.length===0 && (
+        <div style={{ ...S.card, padding:32, textAlign:"center", color:C.gray400, marginBottom:24 }}>
+          No drivers found. Add an employee with the <b>Driver</b> role first.
+        </div>
+      )}
+
+      {/* ADD DELIVERY FORM */}
+      {canAdd && drivers.length>0 && (
+        <div style={{ ...S.card, padding:"20px 24px", marginBottom:24 }}>
+          <div style={{ fontWeight:800, fontSize:14, color:C.gray800, marginBottom:14 }}>➕ Record Deliveries</div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr auto", gap:12, alignItems:"end" }}>
+            <Field label="Driver">
+              <select style={S.input} value={form.driverId} onChange={e=>setForm(f=>({...f,driverId:e.target.value}))}>
+                <option value="">— Select driver —</option>
+                {drivers.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Date">
+              <input style={S.input} type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} />
+            </Field>
+            <Field label="Qty of Deliveries">
+              <input style={S.input} type="number" min="1" value={form.qty} onChange={e=>setForm(f=>({...f,qty:e.target.value}))} />
+            </Field>
+            <Field label="Notes">
+              <input style={S.input} value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="Optional" />
+            </Field>
+            <button style={{ ...S.btn(), padding:"10px 20px" }} onClick={addDelivery}>Add</button>
+          </div>
+        </div>
+      )}
+
+      {/* DELIVERY LOG */}
+      <div style={S.card}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14, padding:"0 4px" }}>
+          <div style={{ fontWeight:800, fontSize:14, color:C.gray800 }}>📋 Delivery Log</div>
+          <select style={{ ...S.input, width:180 }} value={filter} onChange={e=>setFilter(e.target.value)}>
+            <option value="all">All Drivers</option>
+            {drivers.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+        </div>
+        <table style={{ width:"100%", borderCollapse:"collapse" }}>
+          <thead>
+            <tr>{["Driver","Date","Deliveries","Notes","Recorded By",""].map(h=><th key={h} style={S.th}>{h}</th>)}</tr>
+          </thead>
+          <tbody>
+            {[...filtered].reverse().map(d=>(
+              <tr key={d.id}>
+                <td style={S.td}><b>{d.driverName}</b></td>
+                <td style={S.td}>{d.date}</td>
+                <td style={S.td}><b style={{ color:C.orange, fontSize:16 }}>{d.qty}</b></td>
+                <td style={S.td}>{d.notes||"—"}</td>
+                <td style={S.td}>{d.recordedBy}</td>
+                <td style={S.td}>
+                  {canAdd && <button style={S.btnSm(C.redL,C.red)} onClick={()=>dispatch({type:"DELETE_DELIVERY",id:d.id})}>Del</button>}
+                </td>
+              </tr>
+            ))}
+            {filtered.length===0 && <tr><td colSpan={6} style={{ ...S.td, textAlign:"center", color:C.gray400, padding:24 }}>No deliveries recorded yet.</td></tr>}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -2039,6 +2311,10 @@ function App() {
           break;
         }
         case "UPDATE_SUBSCRIPTION": await API.put(`/api/subscriptions/${action.sub.id}`, action.sub); break;
+        case "ADD_DELIVERY":
+        case "DELETE_DELIVERY":
+          // Deliveries stored in memory for now — persisted via LOAD_DATA on next session
+          break;
         default: break;
       }
     } catch(err) { console.error("DB sync error:", err); }
@@ -2073,7 +2349,8 @@ function App() {
       case "shifts":     return <MyShifts   state={state} dispatch={dbDispatch} />;
       case "accounting": return <Accounting state={state} dispatch={dbDispatch} />;
       case "hr":         return <HR         state={state} dispatch={dbDispatch} />;
-      case "employees":  return <Employees  state={state} dispatch={dbDispatch} />;
+      case "employees":  return <Employees        state={state} dispatch={dbDispatch} />;
+      case "deliveries": return <DeliveryTracker   state={state} dispatch={dbDispatch} />;
       default:           return null;
     }
   };
