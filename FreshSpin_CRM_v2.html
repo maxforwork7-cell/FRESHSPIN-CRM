@@ -2346,10 +2346,12 @@ function App() {
           break;
         }
         case "UPDATE_SUBSCRIPTION": await API.put(`/api/subscriptions/${action.sub.id}`, action.sub); break;
-        case "ADD_DELIVERY":
-        case "DELETE_DELIVERY":
-          // Deliveries stored in memory for now — persisted via LOAD_DATA on next session
+        case "ADD_DELIVERY": {
+          const r = await API.post("/api/deliveries", action.delivery);
+          if(r.id) dispatch({type:"ADD_DELIVERY", delivery:{...action.delivery, id:r.id}});
           break;
+        }
+        case "DELETE_DELIVERY": await API.delete(`/api/deliveries/${action.id}`); break;
         default: break;
       }
     } catch(err) { console.error("DB sync error:", err); }

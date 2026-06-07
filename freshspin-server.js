@@ -30,7 +30,8 @@ async function initDB() {
       phone TEXT,
       avatar TEXT,
       active BOOLEAN DEFAULT true,
-      created_at TEXT
+      created_at TEXT,
+      permissions JSONB DEFAULT '[]'
     );
     CREATE TABLE IF NOT EXISTS clients (
       id SERIAL PRIMARY KEY,
@@ -88,6 +89,15 @@ async function initDB() {
       overtime_multiplier NUMERIC DEFAULT 1.5,
       pay_period TEXT DEFAULT 'biweekly'
     );
+    CREATE TABLE IF NOT EXISTS deliveries (
+      id SERIAL PRIMARY KEY,
+      driver_id INTEGER,
+      driver_name TEXT,
+      date TEXT,
+      qty INTEGER DEFAULT 1,
+      notes TEXT,
+      recorded_by TEXT
+    );
   `);
 
   const { rows } = await pool.query("SELECT COUNT(*) FROM users");
@@ -107,7 +117,7 @@ async function initDB() {
 
 // ─── LOAD ALL DATA ──────────────────────────────────────────────────────────
 async function loadAllData() {
-  const [u,c,i,e,s,sub,hr] = await Promise.all([
+  const [u,c,i,e,s,sub,hr,del] = await Promise.all([
     pool.query("SELECT * FROM users ORDER BY id"),
     pool.query("SELECT * FROM clients ORDER BY id"),
     pool.query("SELECT * FROM invoices ORDER BY date DESC"),
@@ -115,15 +125,17 @@ async function loadAllData() {
     pool.query("SELECT * FROM shifts ORDER BY id"),
     pool.query("SELECT * FROM subscriptions ORDER BY id"),
     pool.query("SELECT * FROM hr_config WHERE id=1"),
+    pool.query("SELECT * FROM deliveries ORDER BY id DESC"),
   ]);
   return {
-    users: u.rows.map(r=>({id:r.id,name:r.name,role:r.role,email:r.email,password:r.password,pin:r.pin,phone:r.phone,avatar:r.avatar,active:r.active,createdAt:r.created_at})),
+    users: u.rows.map(r=>({id:r.id,name:r.name,role:r.role,email:r.email,password:r.password,pin:r.pin,phone:r.phone,avatar:r.avatar,active:r.active,createdAt:r.created_at,permissions:r.permissions||[]})),
     clients: c.rows.map(r=>({id:r.id,name:r.name,phone:r.phone,email:r.email,address:r.address,joinDate:r.join_date,loyalty:r.loyalty,notes:r.notes})),
     invoices: i.rows.map(r=>({id:r.id,clientId:r.client_id,clientName:r.client_name,services:r.services,total:Number(r.total),date:r.date,status:r.status,createdBy:r.created_by,notes:r.notes})),
     expenses: e.rows.map(r=>({id:r.id,category:r.category,description:r.description,amount:Number(r.amount),date:r.date,createdBy:r.created_by,proof:r.proof})),
     shifts: s.rows.map(r=>({id:r.id,employeeId:r.employee_id,employeeName:r.employee_name,date:r.date,start:r.start_time,end:r.end_time,hours:Number(r.hours),status:r.status})),
     subscriptions: sub.rows.map(r=>({id:r.id,clientId:r.client_id,clientName:r.client_name,plan:r.plan,amount:Number(r.amount),startDate:r.start_date,expiration:r.expiration,status:r.status})),
     hrConfig: hr.rows[0]?{hourlyRate:Number(hr.rows[0].hourly_rate),overtimeMultiplier:Number(hr.rows[0].overtime_multiplier),payPeriod:hr.rows[0].pay_period}:{hourlyRate:85,overtimeMultiplier:1.5,payPeriod:"biweekly"},
+    deliveries: del.rows.map(r=>({id:r.id,driverId:r.driver_id,driverName:r.driver_name,date:r.date,qty:Number(r.qty),notes:r.notes,recordedBy:r.recorded_by})),
   };
 }
 
@@ -145,7 +157,10 @@ async function handleAPI(req, res, body) {
   }
   if(url.startsWith("/api/users/")&&method==="PUT"){
     const id=url.split("/")[3],u=body;
-    await pool.query(`UPDATE users SET name=$1,role=$2,email=$3,password=$4,pin=$5,phone=$6,avatar=$7 WHERE id=$8`,[u.name,u.role,u.email,u.password,u.pin||"",u.phone||"",u.avatar||"",id]);
+    await pool.query(
+      `UPDATE users SET name=$1,role=$2,email=$3,password=$4,pin=$5,phone=$6,avatar=$7,permissions=$8 WHERE id=$9`,
+      [u.name,u.role,u.email,u.password,u.pin||"",u.phone||"",u.avatar||"",JSON.stringify(u.permissions||[]),id]
+    );
     res.writeHead(200,{"Content-Type":"application/json"});res.end(JSON.stringify({ok:true}));return;
   }
   if(url.startsWith("/api/users/")&&method==="PATCH"){
@@ -234,6 +249,21 @@ async function handleAPI(req, res, body) {
   if(url==="/api/hrconfig"&&method==="PUT"){
     const cfg=body;
     await pool.query(`UPDATE hr_config SET hourly_rate=$1,overtime_multiplier=$2,pay_period=$3 WHERE id=1`,[cfg.hourlyRate,cfg.overtimeMultiplier,cfg.payPeriod]);
+    res.writeHead(200,{"Content-Type":"application/json"});res.end(JSON.stringify({ok:true}));return;
+  }
+
+  // DELIVERIES
+  if(url==="/api/deliveries"&&method==="POST"){
+    const d=body;
+    const r=await pool.query(
+      `INSERT INTO deliveries(driver_id,driver_name,date,qty,notes,recorded_by)VALUES($1,$2,$3,$4,$5,$6)RETURNING id`,
+      [d.driverId,d.driverName,d.date,d.qty,d.notes||"",d.recordedBy||""]
+    );
+    res.writeHead(200,{"Content-Type":"application/json"});res.end(JSON.stringify({id:r.rows[0].id}));return;
+  }
+  if(url.startsWith("/api/deliveries/")&&method==="DELETE"){
+    const id=url.split("/")[3];
+    await pool.query(`DELETE FROM deliveries WHERE id=$1`,[id]);
     res.writeHead(200,{"Content-Type":"application/json"});res.end(JSON.stringify({ok:true}));return;
   }
 
