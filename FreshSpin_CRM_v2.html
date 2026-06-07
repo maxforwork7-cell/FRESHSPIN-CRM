@@ -268,16 +268,16 @@ const T = {
 };
 
 const ROLE_ACCESS = {
-  owner:       ["dashboard","pos","clients","accounting","hr","employees","deliveries"],
-  manager:     ["dashboard","pos","clients","accounting","hr","employees","deliveries"],
-  team_lead:   ["dashboard","pos","clients","shifts","deliveries"],
-  employee:    ["pos","clients","shifts"],
-  driver:      ["shifts","deliveries"],
+  owner:     ["dashboard","pos","clients","accounting","hr","employees","deliveries"],
+  manager:   ["dashboard","pos","clients","accounting","hr","employees","deliveries"],
+  team_lead: ["dashboard","pos","clients","shifts","deliveries"],
+  employee:  ["pos","clients","shifts"],
+  driver:    ["shifts","deliveries"],
 };
 
 const initState = {
   currentUser:   null,
-  users:         [{ id: 1, name: "Max", role: "manager", email: "maxforwork7@gmail.com", password: "Fresh1234", pin: "1234", phone: "", avatar: "MX", active: true, createdAt: "2026-01-01" }],
+  users:         [],
   clients:       [],
   invoices:      [],
   expenses:      [],
@@ -285,16 +285,15 @@ const initState = {
   hrConfig:      { hourlyRate: 85, overtimeMultiplier: 1.5, payPeriod: "biweekly" },
   subscriptions: [],
   deliveries:    [],
-  _loaded:       false,
 };
 
 function reducer(state, action) {
   switch (action.type) {
-    case "LOAD_DATA": return { ...state, ...action.data, _loaded: true };
-    case "ADD_DELIVERY":    return { ...state, deliveries: [...(state.deliveries||[]), action.delivery] };
-    case "DELETE_DELIVERY": return { ...state, deliveries: (state.deliveries||[]).filter(d => d.id !== action.id) };
+    case "LOAD_DATA":          return { ...state, ...action.data };
     case "LOGIN":              return { ...state, currentUser: action.user };
     case "LOGOUT":             return { ...state, currentUser: null };
+    case "ADD_DELIVERY":       return { ...state, deliveries: [...(state.deliveries||[]), action.delivery] };
+    case "DELETE_DELIVERY":    return { ...state, deliveries: (state.deliveries||[]).filter(d=>d.id!==action.id) };
     case "ADD_CLIENT":         return { ...state, clients: [...state.clients, action.client] };
     case "UPDATE_CLIENT":      return { ...state, clients: state.clients.map(c => c.id === action.client.id ? action.client : c) };
     case "DELETE_CLIENT":      return { ...state, clients: state.clients.filter(c => c.id !== action.id) };
@@ -367,8 +366,6 @@ const BADGE = {
   owner:     [C.orangeL, C.orangeD],
   manager:   [C.purpleL, C.purple],
   employee:  [C.tealL,   C.teal],
-  team_lead: [C.purpleL, C.purple],
-  driver:    [C.yellowL, C.yellow],
   active:    [C.greenL,  C.green],
   inactive:  [C.gray200, C.gray500],
 };
@@ -461,29 +458,23 @@ function LoginScreen({ state, dispatch }) {
   const [loading, setLoading] = useState(false);
 
   const login = async () => {
-    setLoading(true);
-    setError("");
+    if(!email||!pass){setError(t.login_error);return;}
+    setLoading(true); setError("");
     try {
-      // Always fetch fresh users from database
-      const data = await fetch("/api/data").then(r => r.json());
-      const users = data.users || [];
-      const user = users.find(u =>
-        u.email.toLowerCase().trim() === email.toLowerCase().trim() &&
-        u.password === pass &&
-        u.active !== false
+      const data = await fetch("/api/data").then(r=>r.json());
+      const users = data.users||[];
+      const user = users.find(u=>
+        u.email.toLowerCase().trim()===email.toLowerCase().trim() &&
+        u.password===pass && u.active!==false
       );
-      if (user) {
-        dispatch({ type: "LOAD_DATA", data });
-        dispatch({ type: "LOGIN", user });
-        setError("");
+      if(user){
+        dispatch({type:"LOAD_DATA", data});
+        dispatch({type:"LOGIN", user});
       } else {
         setError(t.login_error);
       }
-    } catch(err) {
-      // Fallback to local state if API fails
-      const user = state.users.find(u => u.email === email && u.password === pass && u.active !== false);
-      if (user) { dispatch({ type: "LOGIN", user }); setError(""); }
-      else setError(t.login_error);
+    } catch(err){
+      setError("Connection error. Please try again.");
     }
     setLoading(false);
   };
@@ -514,10 +505,9 @@ function LoginScreen({ state, dispatch }) {
             onKeyDown={e => e.key === "Enter" && login()} />
         </Field>
         {error && <div style={{ color: C.red, fontSize: 12, marginBottom: 12, background: C.redL, padding: "8px 12px", borderRadius: 8 }}>{error}</div>}
-        <button style={{ ...S.btn(), width: "100%", justifyContent: "center", padding: "11px 0", fontSize: 14, opacity: loading ? 0.7 : 1 }} onClick={login} disabled={loading}>
+        <button style={{ ...S.btn(), width: "100%", justifyContent: "center", padding: "11px 0", fontSize: 14, opacity: loading?0.7:1 }} onClick={login} disabled={loading}>
           {loading ? "Signing in…" : t.login_btn}
         </button>
-        
       </div>
     </div>
   );
@@ -538,7 +528,7 @@ function Sidebar({ active, setActive, user, dispatch }) {
     { key: "accounting",icon: "📊", label: t.nav_accounting },
     { key: "hr",        icon: "👔", label: t.nav_hr },
     { key: "employees", icon: "🏷", label: t.nav_employees },
-    { key: "deliveries", icon: "🚗", label: "Deliveries" },
+    { key: "deliveries",icon: "🚗", label: "Deliveries" },
   ].filter(n => allowed.includes(n.key));
 
   return (
@@ -594,58 +584,33 @@ function Dashboard({ state, setActive }) {
   const { lang } = React.useContext(LangCtx);
   const t = T[lang];
   const role = state.currentUser.role;
+  const paidInvs = state.invoices.filter(i => i.status === "delivered");
+  const totalRevenue  = paidInvs.reduce((s, i) => s + i.total, 0);
+  const totalExpenses = state.expenses.reduce((s, e) => s + e.amount, 0);
+  const pending       = state.invoices.filter(i => i.status === "pending").length;
+  const myShifts = state.shifts.filter(s => s.employeeId === state.currentUser.id);
+  const upcoming  = myShifts.filter(s => s.status === "scheduled").length;
+  const completed = myShifts.filter(s => s.status === "completed").length;
   const isPriv = role === "owner" || role === "manager";
-  const [dateRange, setDateRange] = React.useState("all");
-
-  const filterByRange = (items, dateKey) => {
-    const now = new Date();
-    return items.filter(item => {
-      const d = new Date(item[dateKey]);
-      if (dateRange === "week") { const s = new Date(now); s.setDate(now.getDate()-now.getDay()); s.setHours(0,0,0,0); return d >= s; }
-      if (dateRange === "month") return d.getMonth()===now.getMonth() && d.getFullYear()===now.getFullYear();
-      if (dateRange === "year")  return d.getFullYear()===now.getFullYear();
-      return true;
-    });
-  };
-
-  const rangeLabels = { all: lang==="es"?"Todo":"All Time", week: lang==="es"?"Esta Semana":"This Week", month: lang==="es"?"Este Mes":"This Month", year: lang==="es"?"Este Año":"This Year" };
-  const btnStyle = r => ({ padding:"6px 14px", borderRadius:20, border:"none", cursor:"pointer", fontWeight:700, fontSize:12, background: dateRange===r ? C.orange : C.gray100, color: dateRange===r ? "#fff" : C.gray600, transition:"all 0.2s" });
-
-  const filteredInvs     = filterByRange(state.invoices, "date");
-  const filteredPaidInvs = filteredInvs.filter(i => i.status === "delivered");
-  const filteredExpenses = filterByRange(state.expenses, "date");
-  const totalRevenue     = filteredPaidInvs.reduce((s,i) => s+i.total, 0);
-  const totalExpenses    = filteredExpenses.reduce((s,e) => s+e.amount, 0);
-  const pending          = filteredInvs.filter(i => i.status==="pending").length;
-  const myShifts  = state.shifts.filter(s => s.employeeId === state.currentUser.id);
-  const upcoming  = myShifts.filter(s => s.status==="scheduled").length;
-  const completed = myShifts.filter(s => s.status==="completed").length;
 
   return (
     <div>
-      <div style={{ marginBottom:22, display:"flex", alignItems:"flex-start", justifyContent:"space-between", flexWrap:"wrap", gap:12 }}>
-        <div>
-          <h2 style={{ margin:0, fontSize:20, fontWeight:800, color:C.gray900, letterSpacing:"-0.02em" }}>
-            {t.welcome}, {state.currentUser.name.split(" ")[0]} 👋
-          </h2>
-          <p style={{ margin:"4px 0 0", fontSize:13, color:C.gray500 }}>{new Date().toLocaleDateString(lang==="es"?"es-DO":"en-US", { weekday:"long", year:"numeric", month:"long", day:"numeric" })}</p>
-        </div>
-        {isPriv && (
-          <div style={{ display:"flex", gap:6, background:C.gray50, padding:4, borderRadius:24, border:`1px solid ${C.gray200}` }}>
-            {["all","week","month","year"].map(r => <button key={r} style={btnStyle(r)} onClick={()=>setDateRange(r)}>{rangeLabels[r]}</button>)}
-          </div>
-        )}
+      <div style={{ marginBottom: 22 }}>
+        <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: C.gray900, letterSpacing: "-0.02em" }}>
+          {t.welcome}, {state.currentUser.name.split(" ")[0]} 👋
+        </h2>
+        <p style={{ margin: "4px 0 0", fontSize: 13, color: C.gray500 }}>{new Date().toLocaleDateString(lang === "es" ? "es-DO" : "en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
       </div>
 
       {isPriv ? (
         <>
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(170px,1fr))", gap:14, marginBottom:24 }}>
-            <StatCard label={t.total_revenue}  value={fmtCurrency(totalRevenue)}  icon="💰" color={C.green}   />
-            <StatCard label={t.total_expenses} value={fmtCurrency(totalExpenses)} icon="📉" color={C.red}     />
-            <StatCard label={t.net_profit}     value={fmtCurrency(totalRevenue-totalExpenses)} icon="📈" color={totalRevenue-totalExpenses>=0?C.orange:C.red} />
-            <StatCard label={t.active_clients} value={state.clients.length}       icon="👥" color={C.teal}    />
-            <StatCard label={t.invoices}       value={filteredInvs.length}        icon="🧾" color={C.gray600} />
-            <StatCard label={t.pending}        value={pending}                    icon="⏳" color={C.yellow}  />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(170px,1fr))", gap: 14, marginBottom: 24 }}>
+            <StatCard label={t.total_revenue}  value={fmtCurrency(totalRevenue)}   icon="💰" color={C.green}    />
+            <StatCard label={t.total_expenses} value={fmtCurrency(totalExpenses)}  icon="📉" color={C.red}      />
+            <StatCard label={t.net_profit}     value={fmtCurrency(totalRevenue - totalExpenses)} icon="📈" color={totalRevenue - totalExpenses >= 0 ? C.orange : C.red} />
+            <StatCard label={t.active_clients} value={state.clients.length}        icon="👥" color={C.teal}     />
+            <StatCard label={t.invoices}       value={state.invoices.length}       icon="🧾" color={C.gray600}  />
+            <StatCard label={t.pending}        value={pending}                     icon="⏳" color={C.yellow}   />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             <div style={S.card}>
@@ -653,7 +618,7 @@ function Dashboard({ state, setActive }) {
               <table style={S.table}>
                 <thead><tr>{["ID", t.client_col, t.total, t.status].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
                 <tbody>
-                  {[...filteredInvs].reverse().slice(0,5).map(i => (
+                  {[...state.invoices].reverse().slice(0,5).map(i => (
                     <tr key={i.id}>
                       <td style={S.td}><b style={{ color: C.orange, fontSize: 12 }}>{i.id}</b></td>
                       <td style={S.td}>{i.clientName}</td>
@@ -669,7 +634,7 @@ function Dashboard({ state, setActive }) {
               <table style={S.table}>
                 <thead><tr>{[t.category, t.description, t.amount].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
                 <tbody>
-                  {[...filteredExpenses].reverse().slice(0,5).map(e => (
+                  {[...state.expenses].reverse().slice(0,5).map(e => (
                     <tr key={e.id}>
                       <td style={S.td}><Badge type="pending" label={e.category} /></td>
                       <td style={S.td}>{e.description}</td>
@@ -1361,40 +1326,24 @@ const EXP_CATS = ["Utilities","Supplies","Maintenance","Salaries","Rent","Market
 function Accounting({ state, dispatch }) {
   const { lang } = React.useContext(LangCtx);
   const t = T[lang];
-  const [tab, setTab]           = useState("overview");
-  const [expForm, setExpForm]   = useState({ category:"Utilities", description:"", amount:"", date:today() });
+  const [tab, setTab]         = useState("overview");
+  const [expForm, setExpForm] = useState({ category: "Utilities", description: "", amount: "", date: today() });
   const [showForm, setShowForm] = useState(false);
-  const [proofFile, setProofFile]   = useState(null);
+  const [proofFile, setProofFile] = useState(null);
   const [proofViewer, setProofViewer] = useState(null);
-  const [dateRange, setDateRange]   = useState("all");
 
-  const filterByRange = (items, dateKey) => {
-    const now = new Date();
-    return items.filter(item => {
-      const d = new Date(item[dateKey]);
-      if (dateRange==="week") { const s=new Date(now); s.setDate(now.getDate()-now.getDay()); s.setHours(0,0,0,0); return d>=s; }
-      if (dateRange==="month") return d.getMonth()===now.getMonth() && d.getFullYear()===now.getFullYear();
-      if (dateRange==="year")  return d.getFullYear()===now.getFullYear();
-      return true;
-    });
-  };
-
-  const rangeLabels = { all:lang==="es"?"Todo":"All Time", week:lang==="es"?"Esta Semana":"This Week", month:lang==="es"?"Este Mes":"This Month", year:lang==="es"?"Este Año":"This Year" };
-  const btnStyle = r => ({ padding:"6px 14px", borderRadius:20, border:"none", cursor:"pointer", fontWeight:700, fontSize:12, background:dateRange===r?C.orange:C.gray100, color:dateRange===r?"#fff":C.gray600, transition:"all 0.2s" });
-
-  const paidInvs         = filterByRange(state.invoices.filter(i=>i.status==="delivered"), "date");
-  const filteredExpenses = filterByRange(state.expenses, "date");
-  const revenue  = paidInvs.reduce((s,i)=>s+i.total, 0);
-  const expenses = filteredExpenses.reduce((s,e)=>s+e.amount, 0);
-  const profit   = revenue - expenses;
+  const paidInvs  = state.invoices.filter(i => i.status === "delivered");
+  const revenue   = paidInvs.reduce((s, i) => s + i.total, 0);
+  const expenses  = state.expenses.reduce((s, e) => s + e.amount, 0);
+  const profit    = revenue - expenses;
 
   const months = {};
-  paidInvs.forEach(i  => { const m=i.date.slice(0,7); if(!months[m]) months[m]={rev:0,exp:0}; months[m].rev+=i.total; });
-  filteredExpenses.forEach(e => { const m=e.date.slice(0,7); if(!months[m]) months[m]={rev:0,exp:0}; months[m].exp+=e.amount; });
+  paidInvs.forEach(i  => { const m = i.date.slice(0,7); if (!months[m]) months[m] = { rev: 0, exp: 0 }; months[m].rev += i.total; });
+  state.expenses.forEach(e => { const m = e.date.slice(0,7); if (!months[m]) months[m] = { rev: 0, exp: 0 }; months[m].exp += e.amount; });
 
   const allMonths = Object.keys(months).sort();
   const expByCatMonth = {};
-  filteredExpenses.forEach(e => {
+  state.expenses.forEach(e => {
     const m = e.date.slice(0,7);
     if (!expByCatMonth[e.category]) expByCatMonth[e.category] = {};
     expByCatMonth[e.category][m] = (expByCatMonth[e.category][m] || 0) + e.amount;
@@ -1465,12 +1414,6 @@ function Accounting({ state, dispatch }) {
         </>}
       </PageHeader>
 
-      <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:14 }}>
-        <div style={{ display:"flex", gap:6, background:C.gray50, padding:4, borderRadius:24, border:`1px solid ${C.gray200}` }}>
-          {["all","week","month","year"].map(r => <button key={r} style={btnStyle(r)} onClick={()=>setDateRange(r)}>{rangeLabels[r]}</button>)}
-        </div>
-      </div>
-
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 22 }}>
         <StatCard label={t.total_revenue}  value={fmtCurrency(revenue)}  icon="💰" color={C.green} />
         <StatCard label={t.total_expenses} value={fmtCurrency(expenses)} icon="📉" color={C.red} />
@@ -1529,7 +1472,7 @@ function Accounting({ state, dispatch }) {
           <table style={S.table}>
             <thead><tr>{[t.category,t.description,t.amount,t.date,t.recorded_by,t.proof,""].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
             <tbody>
-              {[...filteredExpenses].reverse().map(e => (
+              {[...state.expenses].reverse().map(e => (
                 <tr key={e.id}>
                   <td style={S.td}><Badge type="pending" label={e.category} /></td>
                   <td style={S.td}>{e.description}</td>
@@ -1896,13 +1839,11 @@ function Employees({ state, dispatch }) {
   const [showForm,  setShowForm]  = useState(false);
   const [editing,   setEditing]   = useState(null);
   const [showPerms, setShowPerms] = useState(null);
+  const [permForm,  setPermForm]  = useState([]);
   const [form, setForm] = useState({ name:"", email:"", phone:"", role:"employee", password:"", pin:"", permissions:[] });
   const [search, setSearch] = useState("");
 
-  const isManager = state.currentUser.role === "manager" || state.currentUser.role === "owner";
-  const isTeamLead = state.currentUser.role === "team_lead";
-  const canManage = isManager || isTeamLead;
-
+  const isManager = ["manager","owner"].includes(state.currentUser.role);
   const ALL_PERMISSIONS = [
     { key:"view_accounting",  label:"View Accounting" },
     { key:"view_clients",     label:"View Clients" },
@@ -1911,194 +1852,129 @@ function Employees({ state, dispatch }) {
     { key:"view_hr",          label:"View HR & Payroll" },
     { key:"track_deliveries", label:"Track Deliveries" },
   ];
+  const roleOptions = isManager ? ["employee","team_lead","driver","manager"] : ["employee","driver"];
+  const roleLabels  = { manager:"Manager", team_lead:"Team Lead", employee:"Employee", driver:"Driver", owner:"Owner" };
+  const roleColor   = r => ({manager:"#E8650A",team_lead:"#7C3AED",employee:"#0891B2",driver:"#D97706",owner:"#16A34A"}[r]||C.gray500);
 
-  const roleOptions = isManager
-    ? ["employee","team_lead","driver","manager"]
-    : ["employee","driver"];
-
-  const roleLabels = {
-    manager:   "Manager",
-    team_lead: "Team Lead",
-    employee:  "Employee",
-    driver:    "Driver",
-    owner:     "Owner",
-  };
-
-  const filteredUsers = state.users.filter(u =>
-    (u.name||"").toLowerCase().includes(search.toLowerCase()) ||
+  const filtered = state.users.filter(u=>
+    (u.name||"").toLowerCase().includes(search.toLowerCase())||
     (u.email||"").toLowerCase().includes(search.toLowerCase())
   );
 
   const openNew = () => {
     setEditing(null);
-    setForm({ name:"", email:"", phone:"", role:"employee", password: uid().toLowerCase(), pin: Math.floor(1000+Math.random()*9000).toString(), permissions:[] });
+    setForm({ name:"", email:"", phone:"", role:"employee", password:"", pin: Math.floor(1000+Math.random()*9000).toString(), permissions:[] });
     setShowForm(true);
   };
-
   const openEdit = u => {
     setEditing(u);
     setForm({ name:u.name, email:u.email, phone:u.phone||"", role:u.role, password:u.password, pin:u.pin, permissions:u.permissions||[] });
     setShowForm(true);
   };
-
   const save = () => {
-    if (!form.name || !form.email || !form.password) return alert(t.alert_emp_fields);
-    if (editing) {
-      dispatch({ type:"UPDATE_USER", user:{ ...editing, ...form } });
+    if(!form.name||!form.email||!form.password){ alert("Name, email and password are required."); return; }
+    const avatar = initials(form.name);
+    if(editing){
+      dispatch({ type:"UPDATE_USER", user:{ ...editing, ...form, avatar } });
     } else {
-      dispatch({ type:"ADD_USER", user:{ ...form, id:Date.now(), avatar:initials(form.name), active:true, createdAt:today() } });
+      dispatch({ type:"ADD_USER", user:{ ...form, avatar, active:true, createdAt:today(), id:Date.now() } });
     }
     setShowForm(false); setEditing(null);
   };
-
-  const togglePerm = (perm) => {
-    setForm(f => {
-      const perms = f.permissions || [];
-      return { ...f, permissions: perms.includes(perm) ? perms.filter(p=>p!==perm) : [...perms, perm] };
-    });
-  };
-
-  const upgradeToTL = (u) => {
-    if (window.confirm(`Upgrade ${u.name} to Team Lead?`)) {
+  const upgradeToTL = u => {
+    if(window.confirm(`Upgrade ${u.name} to Team Lead?`))
       dispatch({ type:"UPDATE_USER", user:{ ...u, role:"team_lead" } });
-    }
   };
-
-  const roleColor = r => ({
-    manager:"#E8650A", team_lead:"#7C3AED", employee:"#0891B2", driver:"#D97706", owner:"#16A34A"
-  }[r] || C.gray500);
+  const savePerms = () => {
+    dispatch({ type:"UPDATE_USER", user:{ ...showPerms, permissions: permForm } });
+    setShowPerms(null);
+  };
 
   return (
     <div>
       <PageHeader title={t.emp_title}>
-        <input style={{ ...S.input, width:240 }} value={search} onChange={e=>setSearch(e.target.value)} placeholder={t.search_emp} />
-        {canManage && <button style={S.btn()} onClick={openNew}>{t.new_emp}</button>}
+        <input style={{ ...S.input, width:220 }} value={search} onChange={e=>setSearch(e.target.value)} placeholder={t.search_emp} />
+        {isManager && <button style={S.btn()} onClick={openNew}>{t.new_emp}</button>}
       </PageHeader>
 
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))", gap:14, marginBottom:22 }}>
-        {filteredUsers.map(u => (
-          <div key={u.id} style={{ ...S.card, padding:"18px 20px", opacity:u.active===false?0.55:1 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:14 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))", gap:14 }}>
+        {filtered.map(u=>(
+          <div key={u.id} style={{ ...S.card, padding:"18px 20px", opacity:u.active===false?0.5:1 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:12 }}>
               <Avatar name={u.name} role={u.role} size={42} />
               <div>
-                <div style={{ fontSize:14, fontWeight:800, color:C.gray900 }}>{u.name}</div>
+                <div style={{ fontWeight:800, fontSize:14 }}>{u.name}</div>
                 <span style={{ fontSize:11, fontWeight:700, color:roleColor(u.role), background:roleColor(u.role)+"20", borderRadius:20, padding:"2px 10px" }}>
                   {roleLabels[u.role]||u.role}
                 </span>
               </div>
-              {u.active===false && <span style={{ marginLeft:"auto", ...S.badge(C.gray200,C.gray500), fontSize:10 }}>{t.inactive_lbl}</span>}
             </div>
-
-            <div style={{ fontSize:12, color:C.gray500, lineHeight:1.8, marginBottom:12 }}>
+            <div style={{ fontSize:12, color:C.gray500, lineHeight:1.9, marginBottom:12 }}>
               <div>📧 {u.email}</div>
               {u.phone && <div>📱 {u.phone}</div>}
-              <div>📅 {t.joined_lbl} {u.createdAt}</div>
-              {u.role==="driver" && (
-                <div style={{ marginTop:6, padding:"4px 8px", background:C.yellowL, borderRadius:6, color:C.yellow, fontWeight:700 }}>
-                  🚗 Delivery Driver — Paid per delivery
-                </div>
-              )}
-              {(u.permissions||[]).length>0 && (
-                <div style={{ marginTop:6 }}>
-                  🔑 {(u.permissions||[]).length} extra permission{(u.permissions||[]).length>1?"s":""}
-                </div>
-              )}
+              <div>📅 Joined {u.createdAt}</div>
+              {u.role==="driver" && <div style={{ color:C.yellow, fontWeight:700, marginTop:4 }}>🚗 Paid per delivery</div>}
             </div>
-
-            <div style={{ display:"flex", gap:6, marginTop:8, flexWrap:"wrap" }}>
-              {canManage && <button style={{ ...S.btnSm(C.tealL,C.teal), flex:1, justifyContent:"center" }} onClick={()=>openEdit(u)}>{t.edit}</button>}
-
-              {isManager && u.role==="employee" && u.id!==state.currentUser.id && (
-                <button style={{ ...S.btnSm(C.purpleL,C.purple), flex:1, justifyContent:"center" }} onClick={()=>upgradeToTL(u)}>
-                  ⬆ Team Lead
-                </button>
-              )}
-
-              {isManager && (u.role==="team_lead"||u.role==="employee") && u.id!==state.currentUser.id && (
-                <button style={{ ...S.btnSm(C.yellowL,C.yellow), flex:1, justifyContent:"center" }} onClick={()=>{ setShowPerms(u); setForm(f=>({...f, permissions:u.permissions||[]})); }}>
-                  🔑 Permissions
-                </button>
-              )}
-
-              {canManage && u.id!==state.currentUser.id && (
-                <button style={{ ...S.btnSm(u.active===false?C.greenL:C.redL, u.active===false?C.green:C.red), flex:1, justifyContent:"center" }}
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+              {isManager && <button style={{ ...S.btnSm(C.tealL,C.teal) }} onClick={()=>openEdit(u)}>{t.edit}</button>}
+              {isManager && u.role==="employee" && u.id!==state.currentUser.id &&
+                <button style={{ ...S.btnSm(C.purpleL,C.purple) }} onClick={()=>upgradeToTL(u)}>⬆ TL</button>}
+              {isManager && ["team_lead","employee"].includes(u.role) && u.id!==state.currentUser.id &&
+                <button style={{ ...S.btnSm(C.yellowL,C.yellow) }} onClick={()=>{ setShowPerms(u); setPermForm(u.permissions||[]); }}>🔑 Perms</button>}
+              {isManager && u.id!==state.currentUser.id &&
+                <button style={{ ...S.btnSm(u.active===false?C.greenL:C.redL, u.active===false?C.green:C.red) }}
                   onClick={()=>dispatch({ type:"TOGGLE_USER_ACTIVE", id:u.id })}>
                   {u.active===false?t.activate:t.deactivate}
-                </button>
-              )}
+                </button>}
             </div>
           </div>
         ))}
       </div>
 
-      {/* ADD/EDIT EMPLOYEE MODAL */}
       {showForm && (
-        <Modal title={editing?`${t.edit} — ${editing.name}`:t.new_emp_profile} onClose={()=>setShowForm(false)} width={500}>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-            <Field label={t.full_name} style={{ gridColumn:"1/-1" }}>
-              <input style={S.input} value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="First Last" />
+        <Modal title={editing?`Edit — ${editing.name}`:"New Employee"} onClose={()=>setShowForm(false)} width={500}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
+            <Field label="Full Name" style={{ gridColumn:"1/-1" }}>
+              <input style={S.input} value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} />
             </Field>
-            <Field label={t.email}>
+            <Field label="Email">
               <input style={S.input} type="email" value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))} />
             </Field>
-            <Field label={t.phone}>
-              <input style={S.input} value={form.phone} onChange={e=>setForm(f=>({...f,phone:e.target.value}))} placeholder="809-555-0000" />
+            <Field label="Phone">
+              <input style={S.input} value={form.phone} onChange={e=>setForm(f=>({...f,phone:e.target.value}))} />
             </Field>
-            <Field label={t.role}>
+            <Field label="Role">
               <select style={S.input} value={form.role} onChange={e=>setForm(f=>({...f,role:e.target.value}))}>
-                {roleOptions.map(r=><option key={r} value={r}>{roleLabels[r]||r}</option>)}
+                {roleOptions.map(r=><option key={r} value={r}>{roleLabels[r]}</option>)}
               </select>
             </Field>
-            <Field label={t.password_lbl}>
-              <input style={S.input} type="password" value={form.password} onChange={e=>setForm(f=>({...f,password:e.target.value}))} />
+            <Field label="Password">
+              <input style={S.input} value={form.password} onChange={e=>setForm(f=>({...f,password:e.target.value}))} />
             </Field>
-            <Field label={t.pin_lbl} style={{ gridColumn:"1/-1" }}>
-              <input style={S.input} maxLength={4} value={form.pin} onChange={e=>setForm(f=>({...f,pin:e.target.value}))} placeholder="4-digit PIN" />
+            <Field label="PIN (4 digits)" style={{ gridColumn:"1/-1" }}>
+              <input style={S.input} maxLength={4} value={form.pin} onChange={e=>setForm(f=>({...f,pin:e.target.value}))} />
             </Field>
-          </div>
-
-          {isManager && (form.role==="team_lead"||form.role==="employee") && (
-            <div style={{ marginBottom:16 }}>
-              <div style={{ fontSize:12, fontWeight:700, color:C.gray600, marginBottom:8 }}>🔑 Extra Permissions</div>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-                {ALL_PERMISSIONS.map(p => (
-                  <label key={p.key} style={{ display:"flex", alignItems:"center", gap:8, fontSize:12, cursor:"pointer", padding:"6px 10px", borderRadius:8, background:(form.permissions||[]).includes(p.key)?C.purpleL:C.gray50, border:`1px solid ${(form.permissions||[]).includes(p.key)?C.purple:C.gray200}` }}>
-                    <input type="checkbox" checked={(form.permissions||[]).includes(p.key)} onChange={()=>togglePerm(p.key)} />
-                    {p.label}
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div style={{ background:C.yellowL, borderRadius:9, padding:"10px 14px", marginBottom:16, fontSize:12, color:C.yellow }}>
-            {t.credentials_warn}
           </div>
           <button style={{ ...S.btn(), width:"100%", justifyContent:"center", padding:"11px 0" }} onClick={save}>
-            {editing?t.save_changes:t.create_emp_profile}
+            {editing?"Save Changes":"Create Employee"}
           </button>
         </Modal>
       )}
 
-      {/* PERMISSIONS MODAL */}
       {showPerms && (
         <Modal title={`🔑 Permissions — ${showPerms.name}`} onClose={()=>setShowPerms(null)} width={440}>
-          <div style={{ fontSize:13, color:C.gray500, marginBottom:16 }}>Toggle which extra features this {roleLabels[showPerms.role]} can access.</div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:20 }}>
-            {ALL_PERMISSIONS.map(p => {
-              const has = (form.permissions||[]).includes(p.key);
+            {ALL_PERMISSIONS.map(p=>{
+              const has=permForm.includes(p.key);
               return (
                 <label key={p.key} style={{ display:"flex", alignItems:"center", gap:8, fontSize:13, cursor:"pointer", padding:"8px 12px", borderRadius:8, background:has?C.purpleL:C.gray50, border:`1px solid ${has?C.purple:C.gray200}` }}>
-                  <input type="checkbox" checked={has} onChange={()=>togglePerm(p.key)} />
+                  <input type="checkbox" checked={has} onChange={()=>setPermForm(f=>has?f.filter(x=>x!==p.key):[...f,p.key])} />
                   {p.label}
                 </label>
               );
             })}
           </div>
-          <button style={{ ...S.btn(), width:"100%", justifyContent:"center", padding:"11px 0" }} onClick={()=>{
-            dispatch({ type:"UPDATE_USER", user:{ ...showPerms, permissions: form.permissions||[] } });
-            setShowPerms(null);
-          }}>
+          <button style={{ ...S.btn(), width:"100%", justifyContent:"center", padding:"11px 0" }} onClick={savePerms}>
             Save Permissions
           </button>
         </Modal>
@@ -2107,121 +1983,77 @@ function Employees({ state, dispatch }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// DELIVERIES TRACKER
+// DELIVERY TRACKER
 // ═══════════════════════════════════════════════════════════════════════════
 function DeliveryTracker({ state, dispatch }) {
-  const currentRole = state.currentUser.role;
-  const isManager = currentRole==="manager"||currentRole==="owner";
-  const isTeamLead = currentRole==="team_lead";
-  const [form, setForm] = useState({ driverId:"", date:today(), qty:1, notes:"" });
-  const [filter, setFilter] = useState("all");
+  const role      = state.currentUser.role;
+  const isManager = ["manager","owner"].includes(role);
+  const isTL      = role === "team_lead";
 
-  const drivers = state.users.filter(u=>u.role==="driver" && u.active!==false);
-  const deliveries = state.deliveries || [];
-  const filtered = deliveries.filter(d => filter==="all" ? true : d.driverId===Number(filter));
+  const [tab,       setTab]      = useState("log");
+  const [form,      setForm]     = useState({ driverId:"", date:today(), qty:1, notes:"" });
+  const [filter,    setFilter]   = useState("all");
+  const [saved,     setSaved]    = useState(false);
+  const [prices,    setPrices]   = useState({});
+  const [editPrice, setEditPrice]= useState({});
 
-  const summary = drivers.map(d => {
-    const dDeliveries = deliveries.filter(x=>x.driverId===d.id);
-    const total = dDeliveries.reduce((s,x)=>s+x.qty,0);
-    const now = new Date();
-    const twoWeeksAgo = new Date(now); twoWeeksAgo.setDate(now.getDate()-14);
-    const biweekly = dDeliveries.filter(x=>new Date(x.date)>=twoWeeksAgo).reduce((s,x)=>s+x.qty,0);
-    return { ...d, total, biweekly };
+  const drivers    = state.users.filter(u=>u.role==="driver"&&u.active!==false);
+  const deliveries = state.deliveries||[];
+
+  React.useEffect(()=>{
+    try{ const p=JSON.parse(localStorage.getItem("fs_driver_prices")||"{}"); setPrices(p); }catch(e){}
+  },[]);
+
+  const savePrices = updated => {
+    setPrices(updated);
+    localStorage.setItem("fs_driver_prices", JSON.stringify(updated));
+  };
+
+  const filtered = deliveries.filter(d=>filter==="all"?true:d.driverId===Number(filter));
+
+  const summary = drivers.map(d=>{
+    const dd       = deliveries.filter(x=>x.driverId===d.id);
+    const total    = dd.reduce((s,x)=>s+x.qty,0);
+    const now=new Date(), twa=new Date(now); twa.setDate(now.getDate()-14);
+    const biweekly = dd.filter(x=>new Date(x.date)>=twa).reduce((s,x)=>s+x.qty,0);
+    const price    = Number(prices[d.id]||0);
+    return {...d, total, biweekly, price, amountDue: biweekly*price};
   });
 
   const addDelivery = () => {
-    if (!form.driverId || !form.qty) return alert("Select a driver and quantity.");
+    if(!form.driverId||!form.qty){ alert("Select a driver and enter a quantity."); return; }
     const driver = drivers.find(d=>d.id===Number(form.driverId));
-    dispatch({ type:"ADD_DELIVERY", delivery:{ id:Date.now(), driverId:Number(form.driverId), driverName:driver?.name||"", date:form.date, qty:Number(form.qty), notes:form.notes, recordedBy:state.currentUser.name } });
-    setForm(f=>({...f, driverId:"", qty:1, notes:""}));
-    alert("✅ Delivery recorded successfully!");
+    dispatch({ type:"ADD_DELIVERY", delivery:{
+      id:Date.now(), driverId:Number(form.driverId),
+      driverName:driver?.name||"", date:form.date,
+      qty:Number(form.qty), notes:form.notes,
+      recordedBy:state.currentUser.name
+    }});
+    setForm(f=>({...f,driverId:"",qty:1,notes:""}));
+    setSaved(true); setTimeout(()=>setSaved(false),2500);
   };
 
-  // ── TEAM LEAD VIEW — Only the record form ──────────────────────────────────
-  if (isTeamLead) {
-    return (
-      <div>
-        <PageHeader title="🚗 Record Deliveries" />
-        {drivers.length === 0 ? (
-          <div style={{ ...S.card, padding:32, textAlign:"center", color:C.gray400 }}>
-            No drivers available yet. Ask your manager to add a driver.
-          </div>
-        ) : (
-          <div style={{ ...S.card, padding:"28px 28px" }}>
-            <div style={{ fontSize:13, color:C.gray500, marginBottom:20 }}>
-              Record deliveries completed by a driver. Your manager will review the log.
-            </div>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:16 }}>
-              <Field label="Driver">
-                <select style={S.input} value={form.driverId} onChange={e=>setForm(f=>({...f,driverId:e.target.value}))}>
-                  <option value="">— Select driver —</option>
-                  {drivers.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
-                </select>
-              </Field>
-              <Field label="Date">
-                <input style={S.input} type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} />
-              </Field>
-              <Field label="Qty of Deliveries">
-                <input style={S.input} type="number" min="1" value={form.qty} onChange={e=>setForm(f=>({...f,qty:e.target.value}))} />
-              </Field>
-              <Field label="Notes (optional)">
-                <input style={S.input} value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="e.g. Zone A deliveries" />
-              </Field>
-            </div>
-            <button style={{ ...S.btn(), width:"100%", justifyContent:"center", padding:"12px 0", fontSize:15 }} onClick={addDelivery}>
-              ➕ Record Delivery
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  }
+  const tabBtn = (key,label) => (
+    <button onClick={()=>setTab(key)} style={{
+      padding:"8px 18px", borderRadius:20, border:"none", cursor:"pointer",
+      fontWeight:700, fontSize:12,
+      background: tab===key ? C.orange : C.gray100,
+      color:       tab===key ? "#fff"   : C.gray600,
+    }}>{label}</button>
+  );
 
-  // ── MANAGER VIEW — Full dashboard ──────────────────────────────────────────
-  return (
-    <div>
-      <PageHeader title="🚗 Delivery Tracking" />
-
-      {/* Driver summary cards */}
-      {drivers.length>0 ? (
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))", gap:14, marginBottom:24 }}>
-          {summary.map(d=>(
-            <div key={d.id} style={{ ...S.card, padding:"18px 20px" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
-                <Avatar name={d.name} role="driver" size={38} />
-                <div>
-                  <div style={{ fontWeight:800, fontSize:14, color:C.gray900 }}>{d.name}</div>
-                  <div style={{ fontSize:11, color:C.yellow, fontWeight:700 }}>🚗 Driver</div>
-                </div>
-              </div>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-                <div style={{ background:C.tealL, borderRadius:8, padding:"8px 12px", textAlign:"center" }}>
-                  <div style={{ fontSize:22, fontWeight:900, color:C.teal }}>{d.total}</div>
-                  <div style={{ fontSize:10, color:C.teal, fontWeight:700 }}>TOTAL</div>
-                </div>
-                <div style={{ background:C.orangeL, borderRadius:8, padding:"8px 12px", textAlign:"center" }}>
-                  <div style={{ fontSize:22, fontWeight:900, color:C.orange }}>{d.biweekly}</div>
-                  <div style={{ fontSize:10, color:C.orange, fontWeight:700 }}>BI-WEEKLY</div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+  const AddForm = () => (
+    <div style={{ ...S.card, padding:"24px 28px", marginBottom:24 }}>
+      <div style={{ fontWeight:800, fontSize:14, color:C.gray800, marginBottom:16 }}>+ Record Deliveries</div>
+      {saved && <div style={{ background:C.greenL, color:C.green, borderRadius:9, padding:"10px 14px", marginBottom:14, fontWeight:700 }}>Delivery recorded!</div>}
+      {drivers.length===0 ? (
+        <div style={{ color:C.gray400, fontSize:13 }}>No drivers available. Ask the manager to add a driver account.</div>
       ) : (
-        <div style={{ ...S.card, padding:32, textAlign:"center", color:C.gray400, marginBottom:24 }}>
-          No drivers found. Add an employee with the <b>Driver</b> role first.
-        </div>
-      )}
-
-      {/* Record deliveries form */}
-      {drivers.length>0 && (
-        <div style={{ ...S.card, padding:"20px 24px", marginBottom:24 }}>
-          <div style={{ fontWeight:800, fontSize:14, color:C.gray800, marginBottom:14 }}>➕ Record Deliveries</div>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr auto", gap:12, alignItems:"end" }}>
+        <>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:14, marginBottom:16 }}>
             <Field label="Driver">
               <select style={S.input} value={form.driverId} onChange={e=>setForm(f=>({...f,driverId:e.target.value}))}>
-                <option value="">— Select driver —</option>
+                <option value="">Select driver</option>
                 {drivers.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             </Field>
@@ -2231,79 +2063,186 @@ function DeliveryTracker({ state, dispatch }) {
             <Field label="Qty of Deliveries">
               <input style={S.input} type="number" min="1" value={form.qty} onChange={e=>setForm(f=>({...f,qty:e.target.value}))} />
             </Field>
-            <Field label="Notes">
-              <input style={S.input} value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="Optional" />
+            <Field label="Notes (optional)">
+              <input style={S.input} value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="e.g. Zone A" />
             </Field>
-            <button style={{ ...S.btn(), padding:"10px 20px" }} onClick={addDelivery}>Add</button>
           </div>
+          <button style={{ ...S.btn(), padding:"11px 32px", fontSize:14 }} onClick={addDelivery}>Add</button>
+        </>
+      )}
+    </div>
+  );
+
+  const DeliveryLog = () => (
+    <div style={S.card}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+        <div style={{ fontWeight:800, fontSize:14, color:C.gray800 }}>Delivery Log</div>
+        <select style={{ ...S.input, width:200 }} value={filter} onChange={e=>setFilter(e.target.value)}>
+          <option value="all">All Drivers</option>
+          {drivers.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
+        </select>
+      </div>
+      <table style={{ width:"100%", borderCollapse:"collapse" }}>
+        <thead><tr>{["Driver","Date","Deliveries","Notes","Recorded By",isManager?"":""].map((h,i)=><th key={i} style={S.th}>{h}</th>)}</tr></thead>
+        <tbody>
+          {[...filtered].map(d=>(
+            <tr key={d.id}>
+              <td style={S.td}><b>{d.driverName}</b></td>
+              <td style={S.td}>{d.date}</td>
+              <td style={S.td}><b style={{ color:C.orange, fontSize:18 }}>{d.qty}</b></td>
+              <td style={S.td}>{d.notes||"—"}</td>
+              <td style={S.td}>{d.recordedBy}</td>
+              {isManager && <td style={S.td}><button style={S.btnSm(C.redL,C.red)} onClick={()=>dispatch({type:"DELETE_DELIVERY",id:d.id})}>Del</button></td>}
+            </tr>
+          ))}
+          {filtered.length===0 && <tr><td colSpan={6} style={{ ...S.td, textAlign:"center", color:C.gray400, padding:32 }}>No deliveries recorded yet.</td></tr>}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  if(isTL) return (
+    <div>
+      <PageHeader title="Deliveries" />
+      <div style={{ display:"flex", gap:8, marginBottom:20, background:C.gray50, padding:4, borderRadius:24, width:"fit-content", border:`1px solid ${C.gray200}` }}>
+        <button onClick={()=>setTab("add")} style={{ padding:"8px 18px", borderRadius:20, border:"none", cursor:"pointer", fontWeight:700, fontSize:12, background:tab==="add"?C.orange:C.gray100, color:tab==="add"?"#fff":C.gray600 }}>+ Add Delivery</button>
+        <button onClick={()=>setTab("log")} style={{ padding:"8px 18px", borderRadius:20, border:"none", cursor:"pointer", fontWeight:700, fontSize:12, background:tab==="log"?C.orange:C.gray100, color:tab==="log"?"#fff":C.gray600 }}>Delivery Log</button>
+      </div>
+      {tab==="add" && <AddForm />}
+      {tab==="log" && <DeliveryLog />}
+    </div>
+  );
+
+  return (
+    <div>
+      <PageHeader title="Delivery Tracking" />
+
+      {drivers.length>0 && (
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(230px,1fr))", gap:14, marginBottom:24 }}>
+          {summary.map(d=>(
+            <div key={d.id} style={{ ...S.card, padding:"18px 20px" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
+                <Avatar name={d.name} role="driver" size={40} />
+                <div>
+                  <div style={{ fontWeight:800, fontSize:14 }}>{d.name}</div>
+                  <div style={{ fontSize:11, color:C.yellow, fontWeight:700 }}>Driver</div>
+                </div>
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
+                <div style={{ background:C.tealL, borderRadius:8, padding:"8px 12px", textAlign:"center" }}>
+                  <div style={{ fontSize:22, fontWeight:900, color:C.teal }}>{d.total}</div>
+                  <div style={{ fontSize:10, color:C.teal, fontWeight:700 }}>ALL TIME</div>
+                </div>
+                <div style={{ background:C.orangeL, borderRadius:8, padding:"8px 12px", textAlign:"center" }}>
+                  <div style={{ fontSize:22, fontWeight:900, color:C.orange }}>{d.biweekly}</div>
+                  <div style={{ fontSize:10, color:C.orange, fontWeight:700 }}>BI-WEEKLY</div>
+                </div>
+              </div>
+              {d.price>0 && (
+                <div style={{ background:C.greenL, borderRadius:8, padding:"8px 12px", textAlign:"center" }}>
+                  <div style={{ fontSize:17, fontWeight:900, color:C.green }}>{fmtCurrency(d.amountDue)}</div>
+                  <div style={{ fontSize:10, color:C.green, fontWeight:700 }}>PAY DUE ({d.biweekly} x RD${d.price})</div>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
 
-      {/* Delivery log */}
-      <div style={S.card}>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14, padding:"0 4px" }}>
-          <div style={{ fontWeight:800, fontSize:14, color:C.gray800 }}>📋 Delivery Log</div>
-          <select style={{ ...S.input, width:180 }} value={filter} onChange={e=>setFilter(e.target.value)}>
-            <option value="all">All Drivers</option>
-            {drivers.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
-          </select>
-        </div>
-        <table style={{ width:"100%", borderCollapse:"collapse" }}>
-          <thead>
-            <tr>{["Driver","Date","Deliveries","Notes","Recorded By",""].map((h,i)=><th key={i} style={S.th}>{h}</th>)}</tr>
-          </thead>
-          <tbody>
-            {[...filtered].reverse().map(d=>(
-              <tr key={d.id}>
-                <td style={S.td}><b>{d.driverName}</b></td>
-                <td style={S.td}>{d.date}</td>
-                <td style={S.td}><b style={{ color:C.orange, fontSize:16 }}>{d.qty}</b></td>
-                <td style={S.td}>{d.notes||"—"}</td>
-                <td style={S.td}>{d.recordedBy}</td>
-                <td style={S.td}>
-                  <button style={S.btnSm(C.redL,C.red)} onClick={()=>dispatch({type:"DELETE_DELIVERY",id:d.id})}>Del</button>
-                </td>
-              </tr>
-            ))}
-            {filtered.length===0 && <tr><td colSpan={6} style={{ ...S.td, textAlign:"center", color:C.gray400, padding:24 }}>No deliveries recorded yet.</td></tr>}
-          </tbody>
-        </table>
+      <div style={{ display:"flex", gap:8, marginBottom:20, background:C.gray50, padding:4, borderRadius:24, width:"fit-content", border:`1px solid ${C.gray200}` }}>
+        {tabBtn("log",     "Delivery Log")}
+        {tabBtn("add",     "+ Add Delivery")}
+        {tabBtn("config",  "Driver Prices")}
+        {tabBtn("payroll", "Pay Summary")}
       </div>
+
+      {tab==="log"     && <DeliveryLog />}
+      {tab==="add"     && <AddForm />}
+
+      {tab==="config" && (
+        <div style={S.card}>
+          <div style={{ fontWeight:800, fontSize:14, marginBottom:6 }}>Driver Price Configuration</div>
+          <div style={{ fontSize:13, color:C.gray500, marginBottom:20 }}>Set how much each driver earns per delivery (RD$).</div>
+          {drivers.length===0 ? (
+            <div style={{ color:C.gray400, textAlign:"center", padding:32 }}>No drivers found.</div>
+          ) : (
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:14 }}>
+              {drivers.map(d=>(
+                <div key={d.id} style={{ ...S.cardSm, display:"flex", alignItems:"center", gap:14 }}>
+                  <Avatar name={d.name} role="driver" size={38} />
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontWeight:800, fontSize:13, marginBottom:8 }}>{d.name}</div>
+                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                      <span style={{ fontSize:12, color:C.gray500 }}>RD$/delivery:</span>
+                      <input style={{ ...S.input, width:90, padding:"6px 10px" }} type="number" min="0"
+                        value={editPrice[d.id]!==undefined?editPrice[d.id]:(prices[d.id]||"")}
+                        onChange={e=>setEditPrice(p=>({...p,[d.id]:e.target.value}))} placeholder="0" />
+                      <button style={S.btnSm(C.tealL,C.teal)} onClick={()=>{
+                        savePrices({...prices,[d.id]:Number(editPrice[d.id]||prices[d.id]||0)});
+                        setEditPrice(p=>{const n={...p};delete n[d.id];return n;});
+                      }}>Save</button>
+                    </div>
+                  </div>
+                  <div style={{ textAlign:"center" }}>
+                    <div style={{ fontSize:16, fontWeight:900, color:C.orange }}>{fmtCurrency(prices[d.id]||0)}</div>
+                    <div style={{ fontSize:10, color:C.gray400 }}>current</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab==="payroll" && (
+        <div style={S.card}>
+          <div style={{ fontWeight:800, fontSize:14, marginBottom:6 }}>Bi-Weekly Pay Summary</div>
+          <div style={{ fontSize:13, color:C.gray500, marginBottom:20 }}>Deliveries in last 14 days x price per delivery.</div>
+          <table style={{ width:"100%", borderCollapse:"collapse", marginBottom:20 }}>
+            <thead><tr>{["Driver","Rate/Delivery","Deliveries (14d)","Total Pay","Status"].map((h,i)=><th key={i} style={S.th}>{h}</th>)}</tr></thead>
+            <tbody>
+              {summary.map(d=>(
+                <tr key={d.id}>
+                  <td style={S.td}><div style={{ display:"flex", alignItems:"center", gap:10 }}><Avatar name={d.name} role="driver" size={28} /><b>{d.name}</b></div></td>
+                  <td style={S.td}>{d.price>0?fmtCurrency(d.price):<span style={{ color:C.red }}>Not set</span>}</td>
+                  <td style={S.td}><b style={{ fontSize:16, color:C.orange }}>{d.biweekly}</b></td>
+                  <td style={S.td}><b style={{ fontSize:15, color:C.green }}>{fmtCurrency(d.amountDue)}</b></td>
+                  <td style={S.td}>{d.price===0?<span style={{ ...S.badge(C.redL,C.red) }}>Price not set</span>:<span style={{ ...S.badge(C.greenL,C.green) }}>Ready</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ background:C.gray50, borderRadius:10, padding:"14px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <div style={{ fontWeight:800, fontSize:14, color:C.gray700 }}>Total Bi-Weekly Payout</div>
+            <div style={{ fontSize:24, fontWeight:900, color:C.green }}>{fmtCurrency(summary.reduce((s,d)=>s+d.amountDue,0))}</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
 // MAIN APP
 // ═══════════════════════════════════════════════════════════════════════════
-// ─── API HELPER ──────────────────────────────────────────────────────────────
 const API = {
-  get:    url       => fetch(url).then(r=>r.json()),
-  post:   (url,b)   => fetch(url,{method:"POST",  headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
-  put:    (url,b)   => fetch(url,{method:"PUT",   headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
-  patch:  (url,b)   => fetch(url,{method:"PATCH", headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
-  delete: url       => fetch(url,{method:"DELETE"}).then(r=>r.json()),
+  get:    url     => fetch(url).then(r=>r.json()),
+  post:   (url,b) => fetch(url,{method:"POST",  headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
+  put:    (url,b) => fetch(url,{method:"PUT",   headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
+  patch:  (url,b) => fetch(url,{method:"PATCH", headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(r=>r.json()),
+  del:    url     => fetch(url,{method:"DELETE"}).then(r=>r.json()),
 };
 
 function App() {
-  const [state, dispatch]           = useReducer(reducer, initState);
-  const [active, setActive]         = useState("dashboard");
+  const [state, dispatch]   = useReducer(reducer, initState);
+  const [active, setActive] = useState("dashboard");
   const [invoiceClientId, setInvoiceClientId] = useState(null);
-  const [lang, setLang]             = useState("en");
-  const [loading, setLoading]       = useState(true);
+  const [lang, setLang]     = useState("en");
+  const [appLoading, setAppLoading] = useState(false);
 
-  // ── Load all data from DB on startup ──
-  useEffect(() => {
-    API.get("/api/data")
-      .then(data => { dispatch({ type:"LOAD_DATA", data }); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, []);
-
-  // ── DB-synced dispatch — saves to DB first, then updates UI ──
+  // DB-first dispatch: save to DB, then update UI with real ID
   const dbDispatch = async action => {
     try {
       switch(action.type) {
-
         case "ADD_CLIENT": {
           const r = await API.post("/api/clients", action.client);
           if(r.id) dispatch({type:"ADD_CLIENT", client:{...action.client, id:r.id}});
@@ -2313,31 +2252,28 @@ function App() {
           await API.put(`/api/clients/${action.client.id}`, action.client);
           dispatch(action); break;
         case "DELETE_CLIENT":
-          await API.delete(`/api/clients/${action.id}`);
+          await API.del(`/api/clients/${action.id}`);
           dispatch(action); break;
-
         case "ADD_INVOICE":
           await API.post("/api/invoices", action.invoice);
           dispatch(action); break;
         case "UPDATE_INVOICE_STATUS": {
           const inv = state.invoices.find(i=>i.id===action.id);
-          const loyaltyGain = inv && inv.status!=="delivered" && action.status==="delivered" ? Math.floor(inv.total/10) : 0;
-          await API.patch(`/api/invoices/${action.id}`, {status:action.status, clientId:inv?.clientId, loyaltyGain});
+          const loyaltyGain = inv&&inv.status!=="delivered"&&action.status==="delivered"?Math.floor(inv.total/10):0;
+          await API.patch(`/api/invoices/${action.id}`, {status:action.status,clientId:inv?.clientId,loyaltyGain});
           dispatch(action); break;
         }
         case "DELETE_INVOICE":
-          await API.delete(`/api/invoices/${action.id}`);
+          await API.del(`/api/invoices/${action.id}`);
           dispatch(action); break;
-
         case "ADD_EXPENSE": {
           const r = await API.post("/api/expenses", action.expense);
           if(r.id) dispatch({type:"ADD_EXPENSE", expense:{...action.expense, id:r.id}});
           break;
         }
         case "DELETE_EXPENSE":
-          await API.delete(`/api/expenses/${action.id}`);
+          await API.del(`/api/expenses/${action.id}`);
           dispatch(action); break;
-
         case "ADD_SHIFT": {
           const r = await API.post("/api/shifts", action.shift);
           if(r.id) dispatch({type:"ADD_SHIFT", shift:{...action.shift, id:r.id}});
@@ -2347,9 +2283,8 @@ function App() {
           await API.put(`/api/shifts/${action.shift.id}`, action.shift);
           dispatch(action); break;
         case "DELETE_SHIFT":
-          await API.delete(`/api/shifts/${action.id}`);
+          await API.del(`/api/shifts/${action.id}`);
           dispatch(action); break;
-
         case "ADD_USER": {
           const r = await API.post("/api/users", action.user);
           if(r.id) dispatch({type:"ADD_USER", user:{...action.user, id:r.id}});
@@ -2361,11 +2296,9 @@ function App() {
         case "TOGGLE_USER_ACTIVE":
           await API.patch(`/api/users/${action.id}`, {});
           dispatch(action); break;
-
         case "UPDATE_HR_CONFIG":
           await API.put("/api/hrconfig", action.config);
           dispatch(action); break;
-
         case "ADD_SUBSCRIPTION": {
           const r = await API.post("/api/subscriptions", action.sub);
           if(r.id) dispatch({type:"ADD_SUBSCRIPTION", sub:{...action.sub, id:r.id}});
@@ -2374,32 +2307,22 @@ function App() {
         case "UPDATE_SUBSCRIPTION":
           await API.put(`/api/subscriptions/${action.sub.id}`, action.sub);
           dispatch(action); break;
-
         case "ADD_DELIVERY": {
           const r = await API.post("/api/deliveries", action.delivery);
           if(r.id) dispatch({type:"ADD_DELIVERY", delivery:{...action.delivery, id:r.id}});
           break;
         }
         case "DELETE_DELIVERY":
-          await API.delete(`/api/deliveries/${action.id}`);
+          await API.del(`/api/deliveries/${action.id}`);
           dispatch(action); break;
-
         default:
           dispatch(action); break;
       }
     } catch(err) {
-      console.error("DB sync error:", err);
-      alert("⚠️ Could not save. Please check your connection and try again.");
+      console.error("DB error:", err);
+      alert("⚠️ Save failed. Check your connection and try again.");
     }
   };
-
-  if (loading) return (
-    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#F0F4F8",flexDirection:"column",gap:16}}>
-      <div style={{fontSize:48}}>🧺</div>
-      <div style={{fontSize:20,fontWeight:800,color:"#1a1a2e"}}>FreshSpin CRM</div>
-      <div style={{fontSize:13,color:"#888"}}>Loading your data…</div>
-    </div>
-  );
 
   if (!state.currentUser) return (
     <LangCtx.Provider value={{ lang, setLang }}>
@@ -2409,21 +2332,20 @@ function App() {
 
   const role    = state.currentUser.role;
   const allowed = ROLE_ACCESS[role] || [];
-
   const handleNewInvoice = clientId => { setInvoiceClientId(clientId); setActive("pos"); setTimeout(()=>setInvoiceClientId(null),200); };
 
   const renderPage = () => {
     const t = T[lang];
-    if (!allowed.includes(active)) return <div style={{...S.card,textAlign:"center",color:C.gray400,padding:48}}>{t.access_restricted}</div>;
+    if(!allowed.includes(active)) return <div style={{ ...S.card, textAlign:"center", color:C.gray400, padding:48 }}>{t.access_restricted}</div>;
     switch(active) {
-      case "dashboard":  return <Dashboard  state={state} setActive={setActive} />;
-      case "pos":        return <POS        state={state} dispatch={dbDispatch} prefillClientId={invoiceClientId} />;
-      case "clients":    return <Clients    state={state} dispatch={dbDispatch} onNewInvoice={handleNewInvoice} />;
-      case "shifts":     return <MyShifts   state={state} dispatch={dbDispatch} />;
-      case "accounting": return <Accounting state={state} dispatch={dbDispatch} />;
-      case "hr":         return <HR         state={state} dispatch={dbDispatch} />;
-      case "employees":  return <Employees        state={state} dispatch={dbDispatch} />;
-      case "deliveries": return <DeliveryTracker   state={state} dispatch={dbDispatch} />;
+      case "dashboard":  return <Dashboard      state={state} setActive={setActive} />;
+      case "pos":        return <POS            state={state} dispatch={dbDispatch} prefillClientId={invoiceClientId} />;
+      case "clients":    return <Clients        state={state} dispatch={dbDispatch} onNewInvoice={handleNewInvoice} />;
+      case "shifts":     return <MyShifts       state={state} dispatch={dbDispatch} />;
+      case "accounting": return <Accounting     state={state} dispatch={dbDispatch} />;
+      case "hr":         return <HR             state={state} dispatch={dbDispatch} />;
+      case "employees":  return <Employees      state={state} dispatch={dbDispatch} />;
+      case "deliveries": return <DeliveryTracker state={state} dispatch={dbDispatch} />;
       default:           return null;
     }
   };
