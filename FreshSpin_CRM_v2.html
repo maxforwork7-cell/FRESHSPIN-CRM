@@ -1986,15 +1986,75 @@ function Employees({ state, dispatch }) {
 // DELIVERY TRACKER
 // ═══════════════════════════════════════════════════════════════════════════
 function DeliveryTracker({ state, dispatch }) {
+  const { lang } = React.useContext(LangCtx);
   const role      = state.currentUser.role;
   const isManager = ["manager","owner"].includes(role);
   const isTL      = role === "team_lead";
+
+  const DT = {
+    en: {
+      title:"Delivery Tracking", title_tl:"Deliveries",
+      tab_log:"Delivery Log", tab_add:"+ Add Delivery",
+      tab_config:"Driver Prices", tab_pay:"Pay Summary",
+      driver:"Driver", date:"Date", qty:"Qty of Deliveries",
+      notes:"Notes (optional)", type:"Delivery Type",
+      local:"Local Delivery", extended:"Extended Delivery",
+      add:"Add", saved:"Delivery recorded successfully!",
+      no_drivers:"No drivers available. Ask the manager to add a driver account.",
+      log_title:"Delivery Log", all_drivers:"All Drivers",
+      col_driver:"Driver", col_date:"Date", col_del:"Deliveries",
+      col_notes:"Notes", col_by:"Recorded By", col_type:"Type",
+      no_deliveries:"No deliveries recorded yet.",
+      config_title:"Driver Price Configuration",
+      config_sub:"Set prices per delivery type for each driver (RD$).",
+      local_price:"Local (RD$)", ext_price:"Extended (RD$)",
+      save:"Save", current:"current",
+      pay_title:"Bi-Weekly Pay Summary",
+      pay_sub:"Deliveries in last 14 days × price per delivery type.",
+      col_rate_local:"Local Rate", col_rate_ext:"Ext. Rate",
+      col_local:"Local (14d)", col_ext:"Ext. (14d)",
+      col_total_pay:"Total Pay", col_status:"Status",
+      not_set:"Not set", ready:"Ready", price_not_set:"Price not set",
+      total_payout:"Total Bi-Weekly Payout", all_time:"ALL TIME",
+      biweekly:"BI-WEEKLY", pay_due:"PAY DUE",
+      select_driver:"— Select driver —",
+    },
+    es: {
+      title:"Seguimiento de Entregas", title_tl:"Entregas",
+      tab_log:"Registro", tab_add:"+ Agregar", 
+      tab_config:"Precios", tab_pay:"Nómina",
+      driver:"Conductor", date:"Fecha", qty:"Cantidad de Entregas",
+      notes:"Notas (opcional)", type:"Tipo de Entrega",
+      local:"Entrega Local", extended:"Entrega a Domicilio",
+      add:"Agregar", saved:"¡Entrega registrada exitosamente!",
+      no_drivers:"No hay conductores disponibles. Pida al gerente que agregue un conductor.",
+      log_title:"Registro de Entregas", all_drivers:"Todos los Conductores",
+      col_driver:"Conductor", col_date:"Fecha", col_del:"Entregas",
+      col_notes:"Notas", col_by:"Registrado Por", col_type:"Tipo",
+      no_deliveries:"Aún no hay entregas registradas.",
+      config_title:"Configuración de Precios",
+      config_sub:"Configure los precios por tipo de entrega para cada conductor (RD$).",
+      local_price:"Local (RD$)", ext_price:"A Domicilio (RD$)",
+      save:"Guardar", current:"actual",
+      pay_title:"Resumen de Pago Quincenal",
+      pay_sub:"Entregas en los últimos 14 días × precio por tipo.",
+      col_rate_local:"Precio Local", col_rate_ext:"Precio Domicilio",
+      col_local:"Local (14d)", col_ext:"Domicilio (14d)",
+      col_total_pay:"Pago Total", col_status:"Estado",
+      not_set:"No configurado", ready:"Listo", price_not_set:"Precio no configurado",
+      total_payout:"Pago Quincenal Total", all_time:"TODO EL TIEMPO",
+      biweekly:"QUINCENAL", pay_due:"PAGO PENDIENTE",
+      select_driver:"— Seleccionar conductor —",
+    }
+  };
+  const t = DT[lang]||DT.en;
 
   const [tab,       setTab]      = useState("log");
   const [driverId,  setDriverId] = useState("");
   const [date,      setDate]     = useState(today());
   const [qty,       setQty]      = useState(1);
   const [notes,     setNotes]    = useState("");
+  const [delType,   setDelType]  = useState("local");
   const [filter,    setFilter]   = useState("all");
   const [saved,     setSaved]    = useState(false);
   const [prices,    setPrices]   = useState({});
@@ -2015,24 +2075,29 @@ function DeliveryTracker({ state, dispatch }) {
   const filtered = deliveries.filter(d=>filter==="all"?true:d.driverId===Number(filter));
 
   const summary = drivers.map(d=>{
-    const dd       = deliveries.filter(x=>x.driverId===d.id);
-    const total    = dd.reduce((s,x)=>s+x.qty,0);
+    const dd         = deliveries.filter(x=>x.driverId===d.id);
+    const total      = dd.reduce((s,x)=>s+x.qty,0);
     const now=new Date(), twa=new Date(now); twa.setDate(now.getDate()-14);
-    const biweekly = dd.filter(x=>new Date(x.date)>=twa).reduce((s,x)=>s+x.qty,0);
-    const price    = Number(prices[d.id]||0);
-    return {...d, total, biweekly, price, amountDue: biweekly*price};
+    const recent     = dd.filter(x=>new Date(x.date)>=twa);
+    const biweekly   = recent.reduce((s,x)=>s+x.qty,0);
+    const localQty   = recent.filter(x=>x.delType==="local").reduce((s,x)=>s+x.qty,0);
+    const extQty     = recent.filter(x=>x.delType==="extended").reduce((s,x)=>s+x.qty,0);
+    const pLocal     = Number(prices[d.id+"_local"]||prices[d.id]||0);
+    const pExt       = Number(prices[d.id+"_ext"]||prices[d.id]||0);
+    const amountDue  = localQty*pLocal + extQty*pExt;
+    return {...d, total, biweekly, localQty, extQty, pLocal, pExt, amountDue};
   });
 
   const addDelivery = () => {
-    if(!driverId||!qty){ alert("Select a driver and enter a quantity."); return; }
+    if(!driverId||!qty){ alert(lang==="es"?"Selecciona un conductor e ingresa una cantidad.":"Select a driver and enter a quantity."); return; }
     const driver = drivers.find(d=>d.id===Number(driverId));
     dispatch({ type:"ADD_DELIVERY", delivery:{
       id:Date.now(), driverId:Number(driverId),
       driverName:driver?.name||"", date,
-      qty:Number(qty), notes,
+      qty:Number(qty), notes, delType,
       recordedBy:state.currentUser.name
     }});
-    setDriverId(""); setQty(1); setNotes("");
+    setDriverId(""); setQty(1); setNotes(""); setDelType("local");
     setSaved(true); setTimeout(()=>setSaved(false),2500);
   };
 
@@ -2045,62 +2110,79 @@ function DeliveryTracker({ state, dispatch }) {
     }}>{label}</button>
   );
 
-  // ── ADD DELIVERY FORM JSX (inline, not a sub-component) ───────────────────
+  const typeTag = type => (
+    <span style={{ ...S.badge(type==="local"?C.tealL:C.purpleL, type==="local"?C.teal:C.purple), fontSize:10 }}>
+      {type==="local"?t.local:t.extended}
+    </span>
+  );
+
+  // ── ADD FORM (inline JSX) ─────────────────────────────────────────────────
   const addFormJSX = (
     <div style={{ ...S.card, padding:"24px 28px", marginBottom:24 }}>
-      <div style={{ fontWeight:800, fontSize:14, color:C.gray800, marginBottom:16 }}>➕ Record Deliveries</div>
-      {saved && <div style={{ background:C.greenL, color:C.green, borderRadius:9, padding:"10px 14px", marginBottom:14, fontWeight:700 }}>✅ Delivery recorded successfully!</div>}
+      <div style={{ fontWeight:800, fontSize:14, color:C.gray800, marginBottom:16 }}>➕ {t.tab_add.replace("+ ","")}</div>
+      {saved && <div style={{ background:C.greenL, color:C.green, borderRadius:9, padding:"10px 14px", marginBottom:14, fontWeight:700 }}>✅ {t.saved}</div>}
       {drivers.length===0 ? (
-        <div style={{ color:C.gray400, fontSize:13 }}>No drivers available. Ask the manager to add a driver account.</div>
+        <div style={{ color:C.gray400, fontSize:13 }}>{t.no_drivers}</div>
       ) : (
         <>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:14, marginBottom:16 }}>
-            <Field label="Driver">
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:14, marginBottom:14 }}>
+            <Field label={t.driver}>
               <select style={S.input} value={driverId} onChange={e=>setDriverId(e.target.value)}>
-                <option value="">— Select driver —</option>
+                <option value="">{t.select_driver}</option>
                 {drivers.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             </Field>
-            <Field label="Date">
+            <Field label={t.date}>
               <input style={S.input} type="date" value={date} onChange={e=>setDate(e.target.value)} />
             </Field>
-            <Field label="Qty of Deliveries">
+            <Field label={t.qty}>
               <input style={S.input} type="number" min="1" value={qty} onChange={e=>setQty(e.target.value)} />
             </Field>
-            <Field label="Notes (optional)">
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:16 }}>
+            <Field label={t.type}>
+              <select style={S.input} value={delType} onChange={e=>setDelType(e.target.value)}>
+                <option value="local">{t.local}</option>
+                <option value="extended">{t.extended}</option>
+              </select>
+            </Field>
+            <Field label={t.notes}>
               <input style={S.input} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="e.g. Zone A" />
             </Field>
           </div>
-          <button style={{ ...S.btn(), padding:"11px 32px", fontSize:14 }} onClick={addDelivery}>Add</button>
+          <button style={{ ...S.btn(), padding:"11px 32px", fontSize:14 }} onClick={addDelivery}>{t.add}</button>
         </>
       )}
     </div>
   );
 
-  // ── DELIVERY LOG JSX (inline) ─────────────────────────────────────────────
+  // ── LOG (inline JSX) ──────────────────────────────────────────────────────
   const logJSX = (
     <div style={S.card}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
-        <div style={{ fontWeight:800, fontSize:14, color:C.gray800 }}>📋 Delivery Log</div>
+        <div style={{ fontWeight:800, fontSize:14, color:C.gray800 }}>📋 {t.log_title}</div>
         <select style={{ ...S.input, width:200 }} value={filter} onChange={e=>setFilter(e.target.value)}>
-          <option value="all">All Drivers</option>
+          <option value="all">{t.all_drivers}</option>
           {drivers.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
         </select>
       </div>
       <table style={{ width:"100%", borderCollapse:"collapse" }}>
-        <thead><tr>{["Driver","Date","Deliveries","Notes","Recorded By",isManager?"":""].map((h,i)=><th key={i} style={S.th}>{h}</th>)}</tr></thead>
+        <thead>
+          <tr>{[t.col_driver,t.col_date,t.col_del,t.col_type,t.col_notes,t.col_by,isManager?"":""].map((h,i)=><th key={i} style={S.th}>{h}</th>)}</tr>
+        </thead>
         <tbody>
           {[...filtered].map(d=>(
             <tr key={d.id}>
               <td style={S.td}><b>{d.driverName}</b></td>
               <td style={S.td}>{d.date}</td>
               <td style={S.td}><b style={{ color:C.orange, fontSize:18 }}>{d.qty}</b></td>
+              <td style={S.td}>{typeTag(d.delType||"local")}</td>
               <td style={S.td}>{d.notes||"—"}</td>
               <td style={S.td}>{d.recordedBy}</td>
               {isManager && <td style={S.td}><button style={S.btnSm(C.redL,C.red)} onClick={()=>dispatch({type:"DELETE_DELIVERY",id:d.id})}>Del</button></td>}
             </tr>
           ))}
-          {filtered.length===0 && <tr><td colSpan={6} style={{ ...S.td, textAlign:"center", color:C.gray400, padding:32 }}>No deliveries recorded yet.</td></tr>}
+          {filtered.length===0 && <tr><td colSpan={7} style={{ ...S.td, textAlign:"center", color:C.gray400, padding:32 }}>{t.no_deliveries}</td></tr>}
         </tbody>
       </table>
     </div>
@@ -2109,10 +2191,10 @@ function DeliveryTracker({ state, dispatch }) {
   // ── TEAM LEAD VIEW ────────────────────────────────────────────────────────
   if(isTL) return (
     <div>
-      <PageHeader title="🚗 Deliveries" />
+      <PageHeader title={"🚗 "+t.title_tl} />
       <div style={{ display:"flex", gap:8, marginBottom:20, background:C.gray50, padding:4, borderRadius:24, width:"fit-content", border:`1px solid ${C.gray200}` }}>
-        {tabBtn("add","➕ Add Delivery")}
-        {tabBtn("log","📋 Delivery Log")}
+        {tabBtn("add", t.tab_add)}
+        {tabBtn("log", t.tab_log)}
       </div>
       {tab==="add" && addFormJSX}
       {tab==="log" && logJSX}
@@ -2122,11 +2204,11 @@ function DeliveryTracker({ state, dispatch }) {
   // ── MANAGER VIEW ──────────────────────────────────────────────────────────
   return (
     <div>
-      <PageHeader title="🚗 Delivery Tracking" />
+      <PageHeader title={"🚗 "+t.title} />
 
       {/* Driver Summary Cards */}
       {drivers.length>0 && (
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(230px,1fr))", gap:14, marginBottom:24 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))", gap:14, marginBottom:24 }}>
           {summary.map(d=>(
             <div key={d.id} style={{ ...S.card, padding:"18px 20px" }}>
               <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
@@ -2139,17 +2221,27 @@ function DeliveryTracker({ state, dispatch }) {
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
                 <div style={{ background:C.tealL, borderRadius:8, padding:"8px 12px", textAlign:"center" }}>
                   <div style={{ fontSize:22, fontWeight:900, color:C.teal }}>{d.total}</div>
-                  <div style={{ fontSize:10, color:C.teal, fontWeight:700 }}>ALL TIME</div>
+                  <div style={{ fontSize:10, color:C.teal, fontWeight:700 }}>{t.all_time}</div>
                 </div>
                 <div style={{ background:C.orangeL, borderRadius:8, padding:"8px 12px", textAlign:"center" }}>
                   <div style={{ fontSize:22, fontWeight:900, color:C.orange }}>{d.biweekly}</div>
-                  <div style={{ fontSize:10, color:C.orange, fontWeight:700 }}>BI-WEEKLY</div>
+                  <div style={{ fontSize:10, color:C.orange, fontWeight:700 }}>{t.biweekly}</div>
                 </div>
               </div>
-              {d.price>0 && (
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
+                <div style={{ background:C.tealL+"88", borderRadius:8, padding:"6px 10px", textAlign:"center" }}>
+                  <div style={{ fontSize:16, fontWeight:800, color:C.teal }}>{d.localQty}</div>
+                  <div style={{ fontSize:10, color:C.teal, fontWeight:700 }}>{t.local}</div>
+                </div>
+                <div style={{ background:C.purpleL, borderRadius:8, padding:"6px 10px", textAlign:"center" }}>
+                  <div style={{ fontSize:16, fontWeight:800, color:C.purple }}>{d.extQty}</div>
+                  <div style={{ fontSize:10, color:C.purple, fontWeight:700 }}>{t.extended}</div>
+                </div>
+              </div>
+              {(d.pLocal>0||d.pExt>0) && (
                 <div style={{ background:C.greenL, borderRadius:8, padding:"8px 12px", textAlign:"center" }}>
                   <div style={{ fontSize:17, fontWeight:900, color:C.green }}>{fmtCurrency(d.amountDue)}</div>
-                  <div style={{ fontSize:10, color:C.green, fontWeight:700 }}>PAY DUE ({d.biweekly} × RD${d.price})</div>
+                  <div style={{ fontSize:10, color:C.green, fontWeight:700 }}>{t.pay_due}</div>
                 </div>
               )}
             </div>
@@ -2159,43 +2251,60 @@ function DeliveryTracker({ state, dispatch }) {
 
       {/* Tab Nav */}
       <div style={{ display:"flex", gap:8, marginBottom:20, background:C.gray50, padding:4, borderRadius:24, width:"fit-content", border:`1px solid ${C.gray200}` }}>
-        {tabBtn("log",     "📋 Delivery Log")}
-        {tabBtn("add",     "➕ Add Delivery")}
-        {tabBtn("config",  "⚙️ Driver Prices")}
-        {tabBtn("payroll", "💰 Pay Summary")}
+        {tabBtn("log",     t.tab_log)}
+        {tabBtn("add",     t.tab_add)}
+        {tabBtn("config",  t.tab_config)}
+        {tabBtn("payroll", t.tab_pay)}
       </div>
 
       {tab==="log" && logJSX}
       {tab==="add" && addFormJSX}
 
+      {/* DRIVER PRICES CONFIG */}
       {tab==="config" && (
         <div style={S.card}>
-          <div style={{ fontWeight:800, fontSize:14, marginBottom:6 }}>⚙️ Driver Price Configuration</div>
-          <div style={{ fontSize:13, color:C.gray500, marginBottom:20 }}>Set how much each driver earns per delivery (RD$).</div>
+          <div style={{ fontWeight:800, fontSize:14, marginBottom:6 }}>⚙️ {t.config_title}</div>
+          <div style={{ fontSize:13, color:C.gray500, marginBottom:20 }}>{t.config_sub}</div>
           {drivers.length===0 ? (
             <div style={{ color:C.gray400, textAlign:"center", padding:32 }}>No drivers found.</div>
           ) : (
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:14 }}>
+            <div style={{ display:"grid", gap:14 }}>
               {drivers.map(d=>(
-                <div key={d.id} style={{ ...S.cardSm, display:"flex", alignItems:"center", gap:14 }}>
-                  <Avatar name={d.name} role="driver" size={38} />
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontWeight:800, fontSize:13, marginBottom:8 }}>{d.name}</div>
-                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                      <span style={{ fontSize:12, color:C.gray500 }}>RD$/delivery:</span>
+                <div key={d.id} style={{ ...S.cardSm, display:"flex", alignItems:"center", gap:16, flexWrap:"wrap" }}>
+                  <Avatar name={d.name} role="driver" size={42} />
+                  <div style={{ fontWeight:800, fontSize:14, minWidth:100 }}>{d.name}</div>
+                  <div style={{ display:"flex", alignItems:"center", gap:8, flex:1, flexWrap:"wrap" }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                      <span style={{ fontSize:12, color:C.teal, fontWeight:700, whiteSpace:"nowrap" }}>🏠 {t.local_price}</span>
                       <input style={{ ...S.input, width:90, padding:"6px 10px" }} type="number" min="0"
-                        value={editPrice[d.id]!==undefined?editPrice[d.id]:(prices[d.id]||"")}
-                        onChange={e=>setEditPrice(p=>({...p,[d.id]:e.target.value}))}
+                        value={editPrice[d.id+"_local"]!==undefined?editPrice[d.id+"_local"]:(prices[d.id+"_local"]||"")}
+                        onChange={e=>setEditPrice(p=>({...p,[d.id+"_local"]:e.target.value}))}
                         placeholder="0" />
-                      <button style={S.btnSm(C.tealL,C.teal)} onClick={()=>{
-                        savePrices({...prices,[d.id]:Number(editPrice[d.id]||prices[d.id]||0)});
-                        setEditPrice(p=>{const n={...p};delete n[d.id];return n;});
-                      }}>Save</button>
                     </div>
+                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                      <span style={{ fontSize:12, color:C.purple, fontWeight:700, whiteSpace:"nowrap" }}>🏘 {t.ext_price}</span>
+                      <input style={{ ...S.input, width:90, padding:"6px 10px" }} type="number" min="0"
+                        value={editPrice[d.id+"_ext"]!==undefined?editPrice[d.id+"_ext"]:(prices[d.id+"_ext"]||"")}
+                        onChange={e=>setEditPrice(p=>({...p,[d.id+"_ext"]:e.target.value}))}
+                        placeholder="0" />
+                    </div>
+                    <button style={{ ...S.btn(C.tealL,C.teal), padding:"7px 16px" }} onClick={()=>{
+                      const updated={...prices};
+                      if(editPrice[d.id+"_local"]!==undefined) updated[d.id+"_local"]=Number(editPrice[d.id+"_local"]);
+                      if(editPrice[d.id+"_ext"]!==undefined)   updated[d.id+"_ext"]=Number(editPrice[d.id+"_ext"]);
+                      savePrices(updated);
+                      setEditPrice(p=>{const n={...p};delete n[d.id+"_local"];delete n[d.id+"_ext"];return n;});
+                    }}>{t.save}</button>
                   </div>
-                  <div style={{ textAlign:"center" }}>
-                    <div style={{ fontSize:16, fontWeight:900, color:C.orange }}>{fmtCurrency(prices[d.id]||0)}</div>
-                    <div style={{ fontSize:10, color:C.gray400 }}>current</div>
+                  <div style={{ display:"flex", gap:10 }}>
+                    <div style={{ textAlign:"center" }}>
+                      <div style={{ fontSize:14, fontWeight:900, color:C.teal }}>{fmtCurrency(prices[d.id+"_local"]||0)}</div>
+                      <div style={{ fontSize:9, color:C.gray400 }}>Local</div>
+                    </div>
+                    <div style={{ textAlign:"center" }}>
+                      <div style={{ fontSize:14, fontWeight:900, color:C.purple }}>{fmtCurrency(prices[d.id+"_ext"]||0)}</div>
+                      <div style={{ fontSize:9, color:C.gray400 }}>Extended</div>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -2204,30 +2313,35 @@ function DeliveryTracker({ state, dispatch }) {
         </div>
       )}
 
+      {/* PAY SUMMARY */}
       {tab==="payroll" && (
         <div style={S.card}>
-          <div style={{ fontWeight:800, fontSize:14, marginBottom:6 }}>💰 Bi-Weekly Pay Summary</div>
-          <div style={{ fontSize:13, color:C.gray500, marginBottom:20 }}>Deliveries in last 14 days × price per delivery.</div>
+          <div style={{ fontWeight:800, fontSize:14, marginBottom:6 }}>💰 {t.pay_title}</div>
+          <div style={{ fontSize:13, color:C.gray500, marginBottom:20 }}>{t.pay_sub}</div>
           {drivers.length===0 ? (
             <div style={{ color:C.gray400, textAlign:"center", padding:32 }}>No drivers found.</div>
           ) : (
             <>
               <table style={{ width:"100%", borderCollapse:"collapse", marginBottom:20 }}>
-                <thead><tr>{["Driver","Rate/Delivery","Deliveries (14d)","Total Pay","Status"].map((h,i)=><th key={i} style={S.th}>{h}</th>)}</tr></thead>
+                <thead>
+                  <tr>{[t.col_driver,t.col_rate_local,t.col_rate_ext,t.col_local,t.col_ext,t.col_total_pay,t.col_status].map((h,i)=><th key={i} style={S.th}>{h}</th>)}</tr>
+                </thead>
                 <tbody>
                   {summary.map(d=>(
                     <tr key={d.id}>
                       <td style={S.td}><div style={{ display:"flex", alignItems:"center", gap:10 }}><Avatar name={d.name} role="driver" size={28} /><b>{d.name}</b></div></td>
-                      <td style={S.td}>{d.price>0?fmtCurrency(d.price):<span style={{ color:C.red }}>Not set</span>}</td>
-                      <td style={S.td}><b style={{ fontSize:16, color:C.orange }}>{d.biweekly}</b></td>
+                      <td style={S.td}>{d.pLocal>0?<span style={{ color:C.teal, fontWeight:700 }}>{fmtCurrency(d.pLocal)}</span>:<span style={{ color:C.red, fontSize:11 }}>{t.not_set}</span>}</td>
+                      <td style={S.td}>{d.pExt>0?<span style={{ color:C.purple, fontWeight:700 }}>{fmtCurrency(d.pExt)}</span>:<span style={{ color:C.red, fontSize:11 }}>{t.not_set}</span>}</td>
+                      <td style={S.td}><b style={{ color:C.teal }}>{d.localQty}</b></td>
+                      <td style={S.td}><b style={{ color:C.purple }}>{d.extQty}</b></td>
                       <td style={S.td}><b style={{ fontSize:15, color:C.green }}>{fmtCurrency(d.amountDue)}</b></td>
-                      <td style={S.td}>{d.price===0?<span style={{ ...S.badge(C.redL,C.red) }}>Price not set</span>:<span style={{ ...S.badge(C.greenL,C.green) }}>Ready</span>}</td>
+                      <td style={S.td}>{(d.pLocal===0&&d.pExt===0)?<span style={{ ...S.badge(C.redL,C.red) }}>{t.price_not_set}</span>:<span style={{ ...S.badge(C.greenL,C.green) }}>{t.ready}</span>}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
               <div style={{ background:C.gray50, borderRadius:10, padding:"14px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                <div style={{ fontWeight:800, fontSize:14, color:C.gray700 }}>💰 Total Bi-Weekly Payout</div>
+                <div style={{ fontWeight:800, fontSize:14, color:C.gray700 }}>💰 {t.total_payout}</div>
                 <div style={{ fontSize:24, fontWeight:900, color:C.green }}>{fmtCurrency(summary.reduce((s,d)=>s+d.amountDue,0))}</div>
               </div>
             </>
