@@ -2299,62 +2299,98 @@ function App() {
       .catch(() => setLoading(false));
   }, []);
 
-  // ── DB-synced dispatch ──
+  // ── DB-synced dispatch — saves to DB first, then updates UI ──
   const dbDispatch = async action => {
-    dispatch(action);
     try {
       switch(action.type) {
+
         case "ADD_CLIENT": {
           const r = await API.post("/api/clients", action.client);
-          if(r.id) dispatch({type:"UPDATE_CLIENT", client:{...action.client, id:r.id}});
+          if(r.id) dispatch({type:"ADD_CLIENT", client:{...action.client, id:r.id}});
           break;
         }
-        case "UPDATE_CLIENT":   await API.put(`/api/clients/${action.client.id}`, action.client); break;
-        case "DELETE_CLIENT":   await API.delete(`/api/clients/${action.id}`); break;
-        case "ADD_INVOICE":     await API.post("/api/invoices", action.invoice); break;
+        case "UPDATE_CLIENT":
+          await API.put(`/api/clients/${action.client.id}`, action.client);
+          dispatch(action); break;
+        case "DELETE_CLIENT":
+          await API.delete(`/api/clients/${action.id}`);
+          dispatch(action); break;
+
+        case "ADD_INVOICE":
+          await API.post("/api/invoices", action.invoice);
+          dispatch(action); break;
         case "UPDATE_INVOICE_STATUS": {
           const inv = state.invoices.find(i=>i.id===action.id);
           const loyaltyGain = inv && inv.status!=="delivered" && action.status==="delivered" ? Math.floor(inv.total/10) : 0;
           await API.patch(`/api/invoices/${action.id}`, {status:action.status, clientId:inv?.clientId, loyaltyGain});
-          break;
+          dispatch(action); break;
         }
-        case "DELETE_INVOICE":  await API.delete(`/api/invoices/${action.id}`); break;
+        case "DELETE_INVOICE":
+          await API.delete(`/api/invoices/${action.id}`);
+          dispatch(action); break;
+
         case "ADD_EXPENSE": {
           const r = await API.post("/api/expenses", action.expense);
-          if(r.id) dispatch({type:"UPDATE_EXPENSE", expense:{...action.expense, id:r.id}});
+          if(r.id) dispatch({type:"ADD_EXPENSE", expense:{...action.expense, id:r.id}});
           break;
         }
-        case "DELETE_EXPENSE":  await API.delete(`/api/expenses/${action.id}`); break;
+        case "DELETE_EXPENSE":
+          await API.delete(`/api/expenses/${action.id}`);
+          dispatch(action); break;
+
         case "ADD_SHIFT": {
           const r = await API.post("/api/shifts", action.shift);
-          if(r.id) dispatch({type:"UPDATE_SHIFT", shift:{...action.shift, id:r.id}});
+          if(r.id) dispatch({type:"ADD_SHIFT", shift:{...action.shift, id:r.id}});
           break;
         }
-        case "UPDATE_SHIFT":    await API.put(`/api/shifts/${action.shift.id}`, action.shift); break;
-        case "DELETE_SHIFT":    await API.delete(`/api/shifts/${action.id}`); break;
+        case "UPDATE_SHIFT":
+          await API.put(`/api/shifts/${action.shift.id}`, action.shift);
+          dispatch(action); break;
+        case "DELETE_SHIFT":
+          await API.delete(`/api/shifts/${action.id}`);
+          dispatch(action); break;
+
         case "ADD_USER": {
           const r = await API.post("/api/users", action.user);
-          if(r.id) dispatch({type:"UPDATE_USER", user:{...action.user, id:r.id}});
+          if(r.id) dispatch({type:"ADD_USER", user:{...action.user, id:r.id}});
           break;
         }
-        case "UPDATE_USER":         await API.put(`/api/users/${action.user.id}`, action.user); break;
-        case "TOGGLE_USER_ACTIVE":  await API.patch(`/api/users/${action.id}`, {}); break;
-        case "UPDATE_HR_CONFIG":    await API.put("/api/hrconfig", action.config); break;
+        case "UPDATE_USER":
+          await API.put(`/api/users/${action.user.id}`, action.user);
+          dispatch(action); break;
+        case "TOGGLE_USER_ACTIVE":
+          await API.patch(`/api/users/${action.id}`, {});
+          dispatch(action); break;
+
+        case "UPDATE_HR_CONFIG":
+          await API.put("/api/hrconfig", action.config);
+          dispatch(action); break;
+
         case "ADD_SUBSCRIPTION": {
           const r = await API.post("/api/subscriptions", action.sub);
-          if(r.id) dispatch({type:"UPDATE_SUBSCRIPTION", sub:{...action.sub, id:r.id}});
+          if(r.id) dispatch({type:"ADD_SUBSCRIPTION", sub:{...action.sub, id:r.id}});
           break;
         }
-        case "UPDATE_SUBSCRIPTION": await API.put(`/api/subscriptions/${action.sub.id}`, action.sub); break;
+        case "UPDATE_SUBSCRIPTION":
+          await API.put(`/api/subscriptions/${action.sub.id}`, action.sub);
+          dispatch(action); break;
+
         case "ADD_DELIVERY": {
           const r = await API.post("/api/deliveries", action.delivery);
           if(r.id) dispatch({type:"ADD_DELIVERY", delivery:{...action.delivery, id:r.id}});
           break;
         }
-        case "DELETE_DELIVERY": await API.delete(`/api/deliveries/${action.id}`); break;
-        default: break;
+        case "DELETE_DELIVERY":
+          await API.delete(`/api/deliveries/${action.id}`);
+          dispatch(action); break;
+
+        default:
+          dispatch(action); break;
       }
-    } catch(err) { console.error("DB sync error:", err); }
+    } catch(err) {
+      console.error("DB sync error:", err);
+      alert("⚠️ Could not save. Please check your connection and try again.");
+    }
   };
 
   if (loading) return (
