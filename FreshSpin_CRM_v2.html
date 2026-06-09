@@ -1651,123 +1651,129 @@ function Accounting({ state, dispatch }) {
 function HR({ state, dispatch }) {
   const { lang } = React.useContext(LangCtx);
   const t = T[lang];
-  const [tab, setTab]           = useState("shifts");
-  const [shiftForm, setShiftForm] = useState({ employeeId: "", date: today(), start: "08:00", end: "16:00" });
+  const [tab, setTab]             = useState("shifts");
+  const [shiftForm, setShiftForm] = useState({ employeeId:"", date:today(), start:"08:00", end:"16:00" });
   const [showShiftForm, setShowShiftForm] = useState(false);
+  const [empRates, setEmpRates]   = useState({});
+  const [editRates, setEditRates] = useState({});
+
+  // Load per-employee rates from localStorage
+  React.useEffect(()=>{
+    try{ const r=JSON.parse(localStorage.getItem("fs_emp_rates")||"{}"); setEmpRates(r); }catch(e){}
+  },[]);
+
+  const saveRates = updated => {
+    setEmpRates(updated);
+    localStorage.setItem("fs_emp_rates", JSON.stringify(updated));
+  };
 
   const employees = state.users.filter(u => ["employee","team_lead","driver","manager","owner"].includes(u.role) && u.active !== false);
+
   const calcHours = (s, e) => {
-    const [sh, sm] = s.split(":").map(Number), [eh, em] = e.split(":").map(Number);
-    return Math.max(0, (eh * 60 + em - sh * 60 - sm) / 60);
+    const [sh,sm]=s.split(":").map(Number), [eh,em]=e.split(":").map(Number);
+    return Math.max(0,(eh*60+em-sh*60-sm)/60);
   };
 
   const addShift = () => {
     const emp = employees.find(e => e.id === Number(shiftForm.employeeId));
-    if (!emp || !shiftForm.date) return alert(lang === "es" ? "Selecciona empleado y fecha." : "Select employee and date.");
+    if(!emp||!shiftForm.date) return alert(lang==="es"?"Selecciona empleado y fecha.":"Select employee and date.");
     const hours = calcHours(shiftForm.start, shiftForm.end);
-    dispatch({ type: "ADD_SHIFT", shift: { id: Date.now(), employeeId: emp.id, employeeName: emp.name, date: shiftForm.date, start: shiftForm.start, end: shiftForm.end, hours, status: "scheduled" } });
-    setShiftForm({ employeeId: "", date: today(), start: "08:00", end: "16:00" });
+    dispatch({ type:"ADD_SHIFT", shift:{ id:Date.now(), employeeId:emp.id, employeeName:emp.name, date:shiftForm.date, start:shiftForm.start, end:shiftForm.end, hours, status:"scheduled" }});
+    setShiftForm({ employeeId:"", date:today(), start:"08:00", end:"16:00" });
     setShowShiftForm(false);
   };
 
+  // Get rate for employee — use individual rate if set, else global rate
+  const getRate = emp => Number(empRates[emp.id+"_rate"] ?? state.hrConfig.hourlyRate);
+  const getOT   = emp => Number(empRates[emp.id+"_ot"]   ?? state.hrConfig.overtimeMultiplier);
+
   const payroll = employees.map(emp => {
-    const empShifts = state.shifts.filter(s => s.employeeId === emp.id && s.status === "completed");
-    const totalHours = empShifts.reduce((s, sh) => s + sh.hours, 0);
-    const regular = Math.min(totalHours, 80), overtime = Math.max(0, totalHours - 80);
-    const gross = regular * state.hrConfig.hourlyRate + overtime * state.hrConfig.hourlyRate * state.hrConfig.overtimeMultiplier;
-    return { ...emp, totalHours, regular, overtime, gross };
+    const empShifts  = state.shifts.filter(s => s.employeeId===emp.id && s.status==="completed");
+    const totalHours = empShifts.reduce((s,sh)=>s+sh.hours,0);
+    const regular    = Math.min(totalHours, 80);
+    const overtime   = Math.max(0, totalHours-80);
+    const rate       = getRate(emp);
+    const otMult     = getOT(emp);
+    const gross      = regular*rate + overtime*rate*otMult;
+    return { ...emp, totalHours, regular, overtime, gross, rate, otMult };
   });
+
+  const roleLabels = { manager:"Manager", team_lead:"Team Lead", employee:"Employee", driver:"Driver", owner:"Owner" };
 
   return (
     <div>
       <PageHeader title={t.hr_title}>
-        {tab === "shifts" && (
-          <button style={S.btn()} onClick={() => setShowShiftForm(true)}>{t.schedule_shift}</button>
-        )}
+        {tab==="shifts" && <button style={S.btn()} onClick={()=>setShowShiftForm(true)}>{t.schedule_shift}</button>}
       </PageHeader>
 
-      <Tabs
-        tabs={[{key:"shifts",label:t.tab_shifts},{key:"payroll",label:t.tab_payroll},{key:"config",label:t.tab_cfg}]}
-        active={tab} onChange={setTab}
-      />
+      <Tabs tabs={[{key:"shifts",label:t.tab_shifts},{key:"payroll",label:t.tab_payroll},{key:"config",label:t.tab_cfg}]} active={tab} onChange={setTab} />
 
-      {tab === "shifts" && (
+      {/* ── SHIFTS TAB ── */}
+      {tab==="shifts" && (
         <div style={S.card}>
           <table style={S.table}>
-            <thead><tr>{[t.employee,t.date,t.start,t.end,t.hours,t.status,t.actions].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
+            <thead><tr>{[t.employee,t.date,t.start,t.end,t.hours,t.status,t.actions].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
             <tbody>
-              {[...state.shifts].sort((a,b) => b.date.localeCompare(a.date)).map(s => (
+              {[...state.shifts].sort((a,b)=>b.date.localeCompare(a.date)).map(s=>(
                 <tr key={s.id}>
-                  <td style={S.td}>
-                    <div style={{ display:"flex", alignItems:"center", gap: 8 }}>
-                      <Avatar name={s.employeeName} role="employee" size={28} />
-                      <b>{s.employeeName}</b>
-                    </div>
-                  </td>
+                  <td style={S.td}><div style={{ display:"flex", alignItems:"center", gap:8 }}><Avatar name={s.employeeName} role="employee" size={28} /><b>{s.employeeName}</b></div></td>
                   <td style={S.td}>{s.date}</td>
                   <td style={S.td}>{s.start}</td>
                   <td style={S.td}>{s.end}</td>
-                  <td style={{ ...S.td, fontWeight: 700, color: C.orange }}>{s.hours}h</td>
+                  <td style={{ ...S.td, fontWeight:700, color:C.orange }}>{s.hours}h</td>
                   <td style={S.td}><Badge type={s.status} /></td>
                   <td style={S.td}>
-                    <div style={{ display:"flex", gap: 6 }}>
-                      {s.status === "scheduled" && (
-                        <button style={S.btnSm(C.greenL, C.green)} onClick={() => dispatch({ type: "UPDATE_SHIFT", shift: { ...s, status: "completed" } })}>{t.done_btn}</button>
-                      )}
-                      <button style={S.btnSm(C.redL, C.red)} onClick={() => dispatch({ type: "DELETE_SHIFT", id: s.id })}>{t.del}</button>
+                    <div style={{ display:"flex", gap:6 }}>
+                      {s.status==="scheduled" && <button style={S.btnSm(C.greenL,C.green)} onClick={()=>dispatch({type:"UPDATE_SHIFT",shift:{...s,status:"completed"}})}>{t.done_btn}</button>}
+                      <button style={S.btnSm(C.redL,C.red)} onClick={()=>dispatch({type:"DELETE_SHIFT",id:s.id})}>{t.del}</button>
                     </div>
                   </td>
                 </tr>
               ))}
+              {state.shifts.length===0 && <tr><td colSpan={7} style={{ ...S.td, textAlign:"center", color:C.gray400, padding:32 }}>{t.no_shifts}</td></tr>}
             </tbody>
           </table>
         </div>
       )}
 
-      {tab === "payroll" && (
+      {/* ── PAYROLL TAB ── */}
+      {tab==="payroll" && (
         <div>
-          <div style={{ ...S.cardSm, marginBottom: 14, background: C.orangeL, border: `1px solid ${C.orange}44` }}>
-            <span style={{ fontSize: 13, color: C.gray600 }}>
-              {lang === "es" ? "Tarifa:" : "Rate:"} <b style={{ color: C.orangeD }}>{fmtCurrency(state.hrConfig.hourlyRate)}/hr</b> &nbsp;·&nbsp;
-              {lang === "es" ? "Horas Extra:" : "Overtime:"} <b style={{ color: C.orangeD }}>{state.hrConfig.overtimeMultiplier}×</b> &nbsp;·&nbsp;
-              {lang === "es" ? "Período:" : "Period:"} <b style={{ color: C.orangeD }}>{state.hrConfig.payPeriod}</b> &nbsp;·&nbsp;
-              {lang === "es" ? "Basado en" : "Based on"} <b style={{ color: C.orangeD }}>{lang === "es" ? "turnos completados" : "completed shifts only"}</b>
+          <div style={{ ...S.cardSm, marginBottom:14, background:C.orangeL, border:`1px solid ${C.orange}44` }}>
+            <span style={{ fontSize:13, color:C.gray600 }}>
+              {lang==="es"?"Tarifa base global:":"Global base rate:"} <b style={{ color:C.orangeD }}>{fmtCurrency(state.hrConfig.hourlyRate)}/hr</b> &nbsp;·&nbsp;
+              {lang==="es"?"Período:":"Period:"} <b style={{ color:C.orangeD }}>{state.hrConfig.payPeriod}</b> &nbsp;·&nbsp;
+              {lang==="es"?"Las tarifas individuales tienen prioridad":"Individual rates override global"}
             </span>
           </div>
           <div style={S.card}>
             <table style={S.table}>
-              <thead><tr>{[t.employee,t.role,t.total_hours,t.regular,t.overtime,t.gross_pay,""].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
+              <thead><tr>{[t.employee,t.role,lang==="es"?"Tarifa/hr":"Rate/hr",t.total_hours,t.regular,t.overtime,t.gross_pay,""].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
               <tbody>
-                {payroll.map(p => (
+                {payroll.map(p=>(
                   <tr key={p.id}>
-                    <td style={S.td}>
-                      <div style={{ display:"flex", alignItems:"center", gap: 8 }}>
-                        <Avatar name={p.name} role={p.role} size={28} />
-                        <b>{p.name}</b>
-                      </div>
-                    </td>
-                    <td style={S.td}><Badge type={p.role} /></td>
+                    <td style={S.td}><div style={{ display:"flex", alignItems:"center", gap:8 }}><Avatar name={p.name} role={p.role} size={28} /><b>{p.name}</b></div></td>
+                    <td style={S.td}><Badge type={p.role} label={roleLabels[p.role]||p.role} /></td>
+                    <td style={S.td}><b style={{ color:C.teal }}>{fmtCurrency(p.rate)}</b></td>
                     <td style={S.td}>{p.totalHours}h</td>
                     <td style={S.td}>{p.regular}h</td>
-                    <td style={S.td}>{p.overtime}h {p.overtime > 0 && <Badge type="pending" label="OT" />}</td>
-                    <td style={{ ...S.td, fontWeight: 900, fontSize: 15, color: C.green }}>{fmtCurrency(p.gross)}</td>
+                    <td style={S.td}>{p.overtime}h {p.overtime>0&&<Badge type="pending" label="OT" />}</td>
+                    <td style={{ ...S.td, fontWeight:900, fontSize:15, color:C.green }}>{fmtCurrency(p.gross)}</td>
                     <td style={S.td}>
-                      <button style={S.btnSm(C.tealL, C.teal)} onClick={() => {
-                        const msg = lang === "es"
-                          ? `Recibo de Pago — ${p.name}\n\nRegular: ${p.regular}h × ${fmtCurrency(state.hrConfig.hourlyRate)} = ${fmtCurrency(p.regular * state.hrConfig.hourlyRate)}\nHoras Extra: ${p.overtime}h × ${fmtCurrency(state.hrConfig.hourlyRate * state.hrConfig.overtimeMultiplier)} = ${fmtCurrency(p.overtime * state.hrConfig.hourlyRate * state.hrConfig.overtimeMultiplier)}\n\nTOTAL BRUTO: ${fmtCurrency(p.gross)}`
-                          : `Pay Slip — ${p.name}\n\nRegular: ${p.regular}h × ${fmtCurrency(state.hrConfig.hourlyRate)} = ${fmtCurrency(p.regular * state.hrConfig.hourlyRate)}\nOvertime: ${p.overtime}h × ${fmtCurrency(state.hrConfig.hourlyRate * state.hrConfig.overtimeMultiplier)} = ${fmtCurrency(p.overtime * state.hrConfig.hourlyRate * state.hrConfig.overtimeMultiplier)}\n\nGROSS: ${fmtCurrency(p.gross)}`;
+                      <button style={S.btnSm(C.tealL,C.teal)} onClick={()=>{
+                        const msg = lang==="es"
+                          ? `Recibo de Pago — ${p.name}\nRol: ${roleLabels[p.role]||p.role}\nTarifa: ${fmtCurrency(p.rate)}/hr\n\nRegular: ${p.regular}h × ${fmtCurrency(p.rate)} = ${fmtCurrency(p.regular*p.rate)}\nHoras Extra: ${p.overtime}h × ${fmtCurrency(p.rate*p.otMult)} = ${fmtCurrency(p.overtime*p.rate*p.otMult)}\n\nTOTAL BRUTO: ${fmtCurrency(p.gross)}`
+                          : `Pay Slip — ${p.name}\nRole: ${roleLabels[p.role]||p.role}\nRate: ${fmtCurrency(p.rate)}/hr\n\nRegular: ${p.regular}h × ${fmtCurrency(p.rate)} = ${fmtCurrency(p.regular*p.rate)}\nOvertime: ${p.overtime}h × ${fmtCurrency(p.rate*p.otMult)} = ${fmtCurrency(p.overtime*p.rate*p.otMult)}\n\nGROSS: ${fmtCurrency(p.gross)}`;
                         alert(msg);
-                      }}>
-                        {t.pay_slip}
-                      </button>
+                      }}>{t.pay_slip}</button>
                     </td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr>
-                  <td colSpan={5} style={{ ...S.td, fontWeight: 700, textAlign: "right", color: C.gray600 }}>{t.total_payroll}</td>
-                  <td style={{ ...S.td, fontWeight: 900, fontSize: 16, color: C.red }}>{fmtCurrency(payroll.reduce((s, p) => s + p.gross, 0))}</td>
+                  <td colSpan={6} style={{ ...S.td, fontWeight:700, textAlign:"right", color:C.gray600 }}>{t.total_payroll}</td>
+                  <td style={{ ...S.td, fontWeight:900, fontSize:16, color:C.red }}>{fmtCurrency(payroll.reduce((s,p)=>s+p.gross,0))}</td>
                   <td style={S.td}></td>
                 </tr>
               </tfoot>
@@ -1776,52 +1782,114 @@ function HR({ state, dispatch }) {
         </div>
       )}
 
-      {tab === "config" && (
-        <div style={{ ...S.card, maxWidth: 400 }}>
-          <h3 style={{ margin: "0 0 18px", fontSize: 15, fontWeight: 800 }}>{t.hr_cfg_title}</h3>
-          <Field label={t.hourly_rate}>
-            <input style={S.input} type="number" defaultValue={state.hrConfig.hourlyRate}
-              onBlur={e => dispatch({ type: "UPDATE_HR_CONFIG", config: { hourlyRate: Number(e.target.value) } })} />
-          </Field>
-          <Field label={t.overtime_mult}>
-            <input style={S.input} type="number" step="0.1" defaultValue={state.hrConfig.overtimeMultiplier}
-              onBlur={e => dispatch({ type: "UPDATE_HR_CONFIG", config: { overtimeMultiplier: Number(e.target.value) } })} />
-          </Field>
-          <Field label={t.pay_period}>
-            <select style={S.input} defaultValue={state.hrConfig.payPeriod}
-              onChange={e => dispatch({ type: "UPDATE_HR_CONFIG", config: { payPeriod: e.target.value } })}>
-              {["weekly","biweekly","monthly"].map(p => <option key={p}>{p}</option>)}
-            </select>
-          </Field>
-          <div style={{ background: C.greenL, borderRadius: 9, padding: "10px 14px", fontSize: 12, color: C.green, fontWeight: 700 }}>
-            {t.cfg_note}
+      {/* ── CONFIG TAB — per employee ── */}
+      {tab==="config" && (
+        <div>
+          {/* Global defaults */}
+          <div style={{ ...S.card, maxWidth:480, marginBottom:24 }}>
+            <h3 style={{ margin:"0 0 4px", fontSize:15, fontWeight:800 }}>🌐 {lang==="es"?"Configuración Global (Por Defecto)":"Global Defaults"}</h3>
+            <p style={{ margin:"0 0 18px", fontSize:12, color:C.gray500 }}>{lang==="es"?"Se aplica a empleados sin tarifa individual configurada.":"Applied to employees without individual rates set."}</p>
+            <Field label={lang==="es"?"Tarifa por hora (RD$)":t.hourly_rate}>
+              <input style={S.input} type="number" defaultValue={state.hrConfig.hourlyRate}
+                onBlur={e=>dispatch({type:"UPDATE_HR_CONFIG",config:{hourlyRate:Number(e.target.value)}})} />
+            </Field>
+            <Field label={t.overtime_mult}>
+              <input style={S.input} type="number" step="0.1" defaultValue={state.hrConfig.overtimeMultiplier}
+                onBlur={e=>dispatch({type:"UPDATE_HR_CONFIG",config:{overtimeMultiplier:Number(e.target.value)}})} />
+            </Field>
+            <Field label={t.pay_period}>
+              <select style={S.input} defaultValue={state.hrConfig.payPeriod}
+                onChange={e=>dispatch({type:"UPDATE_HR_CONFIG",config:{payPeriod:e.target.value}})}>
+                {["weekly","biweekly","monthly"].map(p=><option key={p}>{p}</option>)}
+              </select>
+            </Field>
+          </div>
+
+          {/* Per-employee rates */}
+          <div style={S.card}>
+            <h3 style={{ margin:"0 0 4px", fontSize:15, fontWeight:800 }}>👤 {lang==="es"?"Tarifas Individuales por Empleado":"Individual Employee Rates"}</h3>
+            <p style={{ margin:"0 0 20px", fontSize:12, color:C.gray500 }}>{lang==="es"?"Configura la tarifa y multiplicador de horas extra por empleado. Deja vacío para usar la tarifa global.":"Set individual hourly rate and overtime multiplier per employee. Leave blank to use global rate."}</p>
+            <div style={{ display:"grid", gap:12 }}>
+              {employees.map(emp=>(
+                <div key={emp.id} style={{ ...S.cardSm, display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
+                  <Avatar name={emp.name} role={emp.role} size={40} />
+                  <div style={{ minWidth:120 }}>
+                    <div style={{ fontWeight:800, fontSize:14 }}>{emp.name}</div>
+                    <div style={{ fontSize:11, color:C.gray400 }}>{roleLabels[emp.role]||emp.role}</div>
+                  </div>
+                  <div style={{ display:"flex", alignItems:"center", gap:8, flex:1, flexWrap:"wrap" }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                      <span style={{ fontSize:12, color:C.gray500, whiteSpace:"nowrap" }}>💰 {lang==="es"?"Tarifa/hr:":"Rate/hr:"}</span>
+                      <input style={{ ...S.input, width:100, padding:"6px 10px" }} type="number" min="0"
+                        placeholder={String(state.hrConfig.hourlyRate)}
+                        value={editRates[emp.id+"_rate"]!==undefined ? editRates[emp.id+"_rate"] : (empRates[emp.id+"_rate"]||"")}
+                        onChange={e=>setEditRates(r=>({...r,[emp.id+"_rate"]:e.target.value}))} />
+                    </div>
+                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                      <span style={{ fontSize:12, color:C.gray500, whiteSpace:"nowrap" }}>⏱ OT ×</span>
+                      <input style={{ ...S.input, width:70, padding:"6px 10px" }} type="number" min="1" step="0.1"
+                        placeholder={String(state.hrConfig.overtimeMultiplier)}
+                        value={editRates[emp.id+"_ot"]!==undefined ? editRates[emp.id+"_ot"] : (empRates[emp.id+"_ot"]||"")}
+                        onChange={e=>setEditRates(r=>({...r,[emp.id+"_ot"]:e.target.value}))} />
+                    </div>
+                    <button style={{ ...S.btn(C.tealL,C.teal), padding:"7px 16px" }} onClick={()=>{
+                      const updated={...empRates};
+                      if(editRates[emp.id+"_rate"]!==undefined && editRates[emp.id+"_rate"]!=="") updated[emp.id+"_rate"]=Number(editRates[emp.id+"_rate"]);
+                      else delete updated[emp.id+"_rate"];
+                      if(editRates[emp.id+"_ot"]!==undefined && editRates[emp.id+"_ot"]!=="") updated[emp.id+"_ot"]=Number(editRates[emp.id+"_ot"]);
+                      else delete updated[emp.id+"_ot"];
+                      saveRates(updated);
+                      setEditRates(r=>{const n={...r};delete n[emp.id+"_rate"];delete n[emp.id+"_ot"];return n;});
+                    }}>{lang==="es"?"Guardar":"Save"}</button>
+                    {(empRates[emp.id+"_rate"]||empRates[emp.id+"_ot"]) && (
+                      <button style={{ ...S.btnSm(C.redL,C.red) }} onClick={()=>{
+                        const updated={...empRates};
+                        delete updated[emp.id+"_rate"]; delete updated[emp.id+"_ot"];
+                        saveRates(updated);
+                      }}>{lang==="es"?"Limpiar":"Clear"}</button>
+                    )}
+                  </div>
+                  <div style={{ textAlign:"center", minWidth:80 }}>
+                    <div style={{ fontSize:15, fontWeight:900, color: empRates[emp.id+"_rate"]?C.orange:C.gray400 }}>
+                      {fmtCurrency(getRate(emp))}/hr
+                    </div>
+                    <div style={{ fontSize:10, color:C.gray400 }}>
+                      {empRates[emp.id+"_rate"] ? (lang==="es"?"individual":"individual") : (lang==="es"?"global":"global")}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ background:C.greenL, borderRadius:9, padding:"10px 14px", fontSize:12, color:C.green, fontWeight:700, marginTop:16 }}>
+              {t.cfg_note}
+            </div>
           </div>
         </div>
       )}
 
       {showShiftForm && (
-        <Modal title={t.schedule_shift_title} onClose={() => setShowShiftForm(false)} width={420}>
+        <Modal title={t.schedule_shift_title} onClose={()=>setShowShiftForm(false)} width={420}>
           <Field label={t.employee}>
-            <select style={S.input} value={shiftForm.employeeId} onChange={e => setShiftForm(f => ({ ...f, employeeId: e.target.value }))}>
+            <select style={S.input} value={shiftForm.employeeId} onChange={e=>setShiftForm(f=>({...f,employeeId:e.target.value}))}>
               <option value="">{t.select_employee}</option>
-              {employees.map(e => <option key={e.id} value={e.id}>{e.name} ({e.role})</option>)}
+              {employees.map(e=><option key={e.id} value={e.id}>{e.name} ({roleLabels[e.role]||e.role})</option>)}
             </select>
           </Field>
           <Field label={t.date}>
-            <input style={S.input} type="date" value={shiftForm.date} onChange={e => setShiftForm(f => ({ ...f, date: e.target.value }))} />
+            <input style={S.input} type="date" value={shiftForm.date} onChange={e=>setShiftForm(f=>({...f,date:e.target.value}))} />
           </Field>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
             <Field label={t.start}>
-              <input style={S.input} type="time" value={shiftForm.start} onChange={e => setShiftForm(f => ({ ...f, start: e.target.value }))} />
+              <input style={S.input} type="time" value={shiftForm.start} onChange={e=>setShiftForm(f=>({...f,start:e.target.value}))} />
             </Field>
             <Field label={t.end}>
-              <input style={S.input} type="time" value={shiftForm.end} onChange={e => setShiftForm(f => ({ ...f, end: e.target.value }))} />
+              <input style={S.input} type="time" value={shiftForm.end} onChange={e=>setShiftForm(f=>({...f,end:e.target.value}))} />
             </Field>
           </div>
-          <div style={{ background: C.orangeL, borderRadius: 9, padding: "10px 14px", marginBottom: 16, fontSize: 13, fontWeight: 700, color: C.orangeD }}>
-            {t.duration} {shiftForm.start && shiftForm.end ? calcHours(shiftForm.start, shiftForm.end) + " " + t.hours : "—"}
+          <div style={{ background:C.orangeL, borderRadius:9, padding:"10px 14px", marginBottom:16, fontSize:13, fontWeight:700, color:C.orangeD }}>
+            {t.duration} {shiftForm.start&&shiftForm.end ? calcHours(shiftForm.start,shiftForm.end)+" "+t.hours : "—"}
           </div>
-          <button style={{ ...S.btn(), width: "100%", justifyContent: "center", padding: "11px 0" }} onClick={addShift}>
+          <button style={{ ...S.btn(), width:"100%", justifyContent:"center", padding:"11px 0" }} onClick={addShift}>
             {t.schedule_btn}
           </button>
         </Modal>
