@@ -1655,7 +1655,7 @@ function HR({ state, dispatch }) {
   const [shiftForm, setShiftForm] = useState({ employeeId: "", date: today(), start: "08:00", end: "16:00" });
   const [showShiftForm, setShowShiftForm] = useState(false);
 
-  const employees = state.users.filter(u => u.role === "employee" || u.role === "manager");
+  const employees = state.users.filter(u => ["employee","team_lead","driver","manager","owner"].includes(u.role) && u.active !== false);
   const calcHours = (s, e) => {
     const [sh, sm] = s.split(":").map(Number), [eh, em] = e.split(":").map(Number);
     return Math.max(0, (eh * 60 + em - sh * 60 - sm) / 60);
