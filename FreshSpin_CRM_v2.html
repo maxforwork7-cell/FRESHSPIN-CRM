@@ -1326,98 +1326,131 @@ const EXP_CATS = ["Utilities","Supplies","Maintenance","Salaries","Rent","Market
 function Accounting({ state, dispatch }) {
   const { lang } = React.useContext(LangCtx);
   const t = T[lang];
-  const [tab, setTab]         = useState("overview");
-  const [expForm, setExpForm] = useState({ category: "Utilities", description: "", amount: "", date: today() });
-  const [showForm, setShowForm] = useState(false);
-  const [proofFile, setProofFile] = useState(null);
+  const [tab,       setTab]      = useState("overview");
+  const [period,    setPeriod]   = useState("all");
+  const [expForm,   setExpForm]  = useState({ category:"Utilities", description:"", amount:"", date:today() });
+  const [showForm,  setShowForm] = useState(false);
+  const [proofFile, setProofFile]   = useState(null);
   const [proofViewer, setProofViewer] = useState(null);
 
-  const paidInvs  = state.invoices.filter(i => i.status === "delivered");
-  const revenue   = paidInvs.reduce((s, i) => s + i.total, 0);
-  const expenses  = state.expenses.reduce((s, e) => s + e.amount, 0);
-  const profit    = revenue - expenses;
+  // ── Period filter helper ──────────────────────────────────────────────────
+  const filterByPeriod = (items, dateKey) => {
+    const now = new Date();
+    return items.filter(item => {
+      const d = new Date(item[dateKey]);
+      if(period==="today") {
+        return d.toDateString()===now.toDateString();
+      }
+      if(period==="week") {
+        const s=new Date(now); s.setDate(now.getDate()-now.getDay()); s.setHours(0,0,0,0);
+        return d>=s;
+      }
+      if(period==="month") return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();
+      return true; // "all"
+    });
+  };
 
+  const periodLabels = {
+    en: { all:"All Time", month:"This Month", week:"This Week", today:"Today" },
+    es: { all:"Todo",     month:"Este Mes",   week:"Esta Semana", today:"Hoy" },
+  };
+  const PL = periodLabels[lang]||periodLabels.en;
+
+  const paidInvs = filterByPeriod(state.invoices.filter(i=>i.status==="delivered"), "date");
+  const filteredExpenses = filterByPeriod(state.expenses, "date");
+  const revenue  = paidInvs.reduce((s,i)=>s+i.total,0);
+  const expenses = filteredExpenses.reduce((s,e)=>s+e.amount,0);
+  const profit   = revenue - expenses;
+
+  // Monthly overview always uses all data (for the table/chart)
+  const allPaidInvs = state.invoices.filter(i=>i.status==="delivered");
   const months = {};
-  paidInvs.forEach(i  => { const m = i.date.slice(0,7); if (!months[m]) months[m] = { rev: 0, exp: 0 }; months[m].rev += i.total; });
-  state.expenses.forEach(e => { const m = e.date.slice(0,7); if (!months[m]) months[m] = { rev: 0, exp: 0 }; months[m].exp += e.amount; });
+  allPaidInvs.forEach(i  => { const m=i.date.slice(0,7); if(!months[m]) months[m]={rev:0,exp:0}; months[m].rev+=i.total; });
+  state.expenses.forEach(e => { const m=e.date.slice(0,7); if(!months[m]) months[m]={rev:0,exp:0}; months[m].exp+=e.amount; });
 
   const allMonths = Object.keys(months).sort();
   const expByCatMonth = {};
   state.expenses.forEach(e => {
     const m = e.date.slice(0,7);
-    if (!expByCatMonth[e.category]) expByCatMonth[e.category] = {};
-    expByCatMonth[e.category][m] = (expByCatMonth[e.category][m] || 0) + e.amount;
+    if(!expByCatMonth[e.category]) expByCatMonth[e.category]={};
+    expByCatMonth[e.category][m]=(expByCatMonth[e.category][m]||0)+e.amount;
   });
   const expCategories = Object.keys(expByCatMonth);
-  const fmtMonth = m => { const [yr, mo] = m.split("-"); return new Date(+yr, +mo-1).toLocaleString(lang === "es" ? "es-DO" : "en-US", { month: "short", year: "2-digit" }); };
+  const fmtMonth = m => { const [yr,mo]=m.split("-"); return new Date(+yr,+mo-1).toLocaleString(lang==="es"?"es-DO":"en-US",{month:"short",year:"2-digit"}); };
 
   const handleProof = ev => {
-    const file = ev.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = e => setProofFile({ name: file.name, type: file.type, data: e.target.result });
+    const file=ev.target.files[0]; if(!file) return;
+    const reader=new FileReader();
+    reader.onload=e=>setProofFile({name:file.name,type:file.type,data:e.target.result});
     reader.readAsDataURL(file);
   };
 
   const addExpense = () => {
-    if (!expForm.description || !expForm.amount) return alert(t.alert_fill);
-    dispatch({ type: "ADD_EXPENSE", expense: { ...expForm, id: Date.now(), amount: Number(expForm.amount), createdBy: state.currentUser.name, proof: proofFile || null } });
-    setExpForm({ category: "Utilities", description: "", amount: "", date: today() });
-    setProofFile(null);
-    setShowForm(false);
+    if(!expForm.description||!expForm.amount) return alert(t.alert_fill);
+    dispatch({type:"ADD_EXPENSE",expense:{...expForm,id:Date.now(),amount:Number(expForm.amount),createdBy:state.currentUser.name,proof:proofFile||null}});
+    setExpForm({category:"Utilities",description:"",amount:"",date:today()});
+    setProofFile(null); setShowForm(false);
   };
 
-  const canAddExpense = state.currentUser.role === "owner" || state.currentUser.role === "manager";
+  const canAddExpense = state.currentUser.role==="owner"||state.currentUser.role==="manager";
 
   const downloadExcel = () => {
-    const wb = XLSX.utils.book_new();
-    // P&L Summary
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([
       ["FRESHSPIN DRY & LAUNDRY – PROFIT & LOSS SUMMARY"],
-      [`Report generated: ${today()}`],
-      [],
-      ["Line Item", ...allMonths.map(fmtMonth), "Annual Total"],
-      ["TOTAL REVENUE",         ...allMonths.map(m => months[m]?.rev || 0), revenue],
-      ["TOTAL EXPENSES",        ...allMonths.map(m => months[m]?.exp || 0), expenses],
-      ["GROSS PROFIT / (LOSS)", ...allMonths.map(m => (months[m]?.rev||0)-(months[m]?.exp||0)), profit],
-      ["Net Profit Margin %",   ...allMonths.map(m => months[m]?.rev > 0 ? +((months[m].rev-months[m].exp)/months[m].rev).toFixed(4) : 0), revenue > 0 ? +(profit/revenue).toFixed(4) : 0],
-    ]), "P&L Summary");
-    // Monthly Expenses
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-      ["FRESHSPIN DRY & LAUNDRY – MONTHLY EXPENSE TRACKER"],
-      [`Report generated: ${today()}`],
-      [],
-      ["Expense Category", ...allMonths.map(fmtMonth), "Annual Total"],
-      ...expCategories.map(cat => [cat, ...allMonths.map(m => expByCatMonth[cat]?.[m] || 0), Object.values(expByCatMonth[cat]).reduce((s,v)=>s+v,0)]),
-      [],
-      ["TOTAL MONTHLY EXPENSES", ...allMonths.map(m => months[m]?.exp || 0), expenses],
-    ]), "Monthly Expenses");
-    // Income Detail
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-      ["FRESHSPIN DRY & LAUNDRY – INCOME DETAIL"],
-      [`Report generated: ${today()}`],
-      [],
-      ["Invoice #", "Client", "Services", "Amount (RD$)", "Date", "Created By"],
-      ...paidInvs.map(i => [i.id, i.clientName, i.services.map(s=>s.name).join(", "), i.total, i.date, i.createdBy]),
-      [],
-      ["TOTAL", "", "", revenue, "", ""],
-    ]), "Income Detail");
-    XLSX.writeFile(wb, `FreshSpin_Report_${today()}.xlsx`);
+      [`Report generated: ${today()}`],[],
+      ["Line Item",...allMonths.map(fmtMonth),"Annual Total"],
+      ["TOTAL REVENUE",...allMonths.map(m=>months[m]?.rev||0),allPaidInvs.reduce((s,i)=>s+i.total,0)],
+      ["TOTAL EXPENSES",...allMonths.map(m=>months[m]?.exp||0),state.expenses.reduce((s,e)=>s+e.amount,0)],
+      ["GROSS PROFIT",...allMonths.map(m=>(months[m]?.rev||0)-(months[m]?.exp||0)),(allPaidInvs.reduce((s,i)=>s+i.total,0)-state.expenses.reduce((s,e)=>s+e.amount,0))],
+    ]),"P&L Summary");
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([
+      ["FRESHSPIN DRY & LAUNDRY – INCOME DETAIL"],[`Report generated: ${today()}`],[],
+      ["Invoice #","Client","Services","Amount (RD$)","Date","Created By"],
+      ...allPaidInvs.map(i=>[i.id,i.clientName,i.services.map(s=>s.name).join(", "),i.total,i.date,i.createdBy]),
+      [],["TOTAL","","",allPaidInvs.reduce((s,i)=>s+i.total,0),"",""],
+    ]),"Income Detail");
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([
+      ["FRESHSPIN DRY & LAUNDRY – EXPENSE DETAIL"],[`Report generated: ${today()}`],[],
+      ["Category","Description","Amount (RD$)","Date","Recorded By"],
+      ...state.expenses.map(e=>[e.category,e.description,e.amount,e.date,e.createdBy]),
+      [],["TOTAL","",state.expenses.reduce((s,e)=>s+e.amount,0),"",""],
+    ]),"Expense Detail");
+    XLSX.writeFile(wb,`FreshSpin_Report_${today()}.xlsx`);
   };
+
+  const periodBtn = (key,label) => (
+    <button key={key} onClick={()=>setPeriod(key)} style={{
+      padding:"6px 14px", borderRadius:20, border:"none", cursor:"pointer",
+      fontWeight:700, fontSize:12,
+      background: period===key ? C.orange : C.gray100,
+      color:       period===key ? "#fff"   : C.gray600,
+      transition:"all 0.2s",
+    }}>{label}</button>
+  );
 
   return (
     <div>
       <PageHeader title={t.accounting_title}>
         {canAddExpense && <>
-          <button style={S.btn(C.tealL, C.tealD)} onClick={downloadExcel}>{t.excel_report}</button>
-          <button style={S.btn()} onClick={() => setShowForm(true)}>{t.record_expense}</button>
+          <button style={S.btn(C.tealL,C.tealD)} onClick={downloadExcel}>{t.excel_report}</button>
+          <button style={S.btn()} onClick={()=>setShowForm(true)}>{t.record_expense}</button>
         </>}
       </PageHeader>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 22 }}>
+      {/* Period Filter */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end", marginBottom:16, gap:6, background:C.gray50, padding:4, borderRadius:24, width:"fit-content", marginLeft:"auto", border:`1px solid ${C.gray200}` }}>
+        {periodBtn("all",   PL.all)}
+        {periodBtn("month", PL.month)}
+        {periodBtn("week",  PL.week)}
+        {periodBtn("today", PL.today)}
+      </div>
+
+      {/* Stat Cards */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:14, marginBottom:22 }}>
         <StatCard label={t.total_revenue}  value={fmtCurrency(revenue)}  icon="💰" color={C.green} />
         <StatCard label={t.total_expenses} value={fmtCurrency(expenses)} icon="📉" color={C.red} />
-        <StatCard label={t.net_profit}     value={fmtCurrency(profit)}   icon="📈" color={profit >= 0 ? C.orange : C.red} />
+        <StatCard label={t.net_profit}     value={fmtCurrency(profit)}   icon="📈" color={profit>=0?C.orange:C.red} />
       </div>
 
       <Tabs
@@ -1472,7 +1505,7 @@ function Accounting({ state, dispatch }) {
           <table style={S.table}>
             <thead><tr>{[t.category,t.description,t.amount,t.date,t.recorded_by,t.proof,""].map(h => <th key={h} style={S.th}>{h}</th>)}</tr></thead>
             <tbody>
-              {[...state.expenses].reverse().map(e => (
+              {[...filteredExpenses].reverse().map(e => (
                 <tr key={e.id}>
                   <td style={S.td}><Badge type="pending" label={e.category} /></td>
                   <td style={S.td}>{e.description}</td>
