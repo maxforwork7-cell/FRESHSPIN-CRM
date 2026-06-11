@@ -2008,33 +2008,144 @@ function HR({ state, dispatch }) {
       )}
 
       {showShiftForm && (
-        <Modal title={t.schedule_shift_title} onClose={()=>setShowShiftForm(false)} width={420}>
-          <Field label={t.employee}>
-            <select style={S.input} value={shiftForm.employeeId} onChange={e=>setShiftForm(f=>({...f,employeeId:e.target.value}))}>
-              <option value="">{t.select_employee}</option>
-              {employees.map(e=><option key={e.id} value={e.id}>{e.name} ({roleLabels[e.role]||e.role})</option>)}
-            </select>
-          </Field>
-          <Field label={t.date}>
-            <input style={S.input} type="date" value={shiftForm.date} onChange={e=>setShiftForm(f=>({...f,date:e.target.value}))} />
-          </Field>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-            <Field label={t.start}>
-              <input style={S.input} type="time" value={shiftForm.start} onChange={e=>setShiftForm(f=>({...f,start:e.target.value}))} />
-            </Field>
-            <Field label={t.end}>
-              <input style={S.input} type="time" value={shiftForm.end} onChange={e=>setShiftForm(f=>({...f,end:e.target.value}))} />
-            </Field>
-          </div>
-          <div style={{ background:C.orangeL, borderRadius:9, padding:"10px 14px", marginBottom:16, fontSize:13, fontWeight:700, color:C.orangeD }}>
-            {t.duration} {shiftForm.start&&shiftForm.end ? calcHours(shiftForm.start,shiftForm.end)+" "+t.hours : "—"}
-          </div>
-          <button style={{ ...S.btn(), width:"100%", justifyContent:"center", padding:"11px 0" }} onClick={addShift}>
-            {t.schedule_btn}
-          </button>
-        </Modal>
+        <WeeklyShiftModal
+          lang={lang}
+          employees={employees}
+          roleLabels={roleLabels}
+          calcHours={calcHours}
+          onClose={()=>setShowShiftForm(false)}
+          onSave={(shifts)=>{
+            shifts.forEach(s=>dispatch({type:"ADD_SHIFT",shift:s}));
+            setShowShiftForm(false);
+          }}
+        />
       )}
     </div>
+  );
+}
+
+// ── Weekly Shift Scheduler Modal ──────────────────────────────────────────
+function WeeklyShiftModal({ lang, employees, roleLabels, calcHours, onClose, onSave }) {
+  const DAY_NAMES = lang==="es"
+    ? ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"]
+    : ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  const DAY_FULL = lang==="es"
+    ? ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]
+    : ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+
+  // Get Monday of the current week
+  const getMonday = (date) => {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day===0?-6:1);
+    d.setDate(diff); d.setHours(0,0,0,0);
+    return d.toISOString().split("T")[0];
+  };
+
+  const [empId,    setEmpId]    = useState("");
+  const [weekStart,setWeekStart]= useState(getMonday(today()));
+  const [start,    setStart]    = useState("09:00");
+  const [end,      setEnd]      = useState("18:00");
+  const [days,     setDays]     = useState([true,true,true,true,true,false,false]); // Mon-Fri on, Sat-Sun off
+  const [saved,    setSaved]    = useState(false);
+
+  const toggleDay = i => setDays(d=>d.map((v,j)=>j===i?!v:v));
+
+  // Get date for each day of the selected week
+  const weekDates = Array.from({length:7},(_,i)=>{
+    const d = new Date(weekStart);
+    d.setDate(d.getDate()+i);
+    return d.toISOString().split("T")[0];
+  });
+
+  const hours = calcHours(start,end);
+  const selectedDays = days.filter(Boolean).length;
+
+  const handleSave = () => {
+    if(!empId){ alert(lang==="es"?"Selecciona un empleado.":"Select an employee."); return; }
+    if(selectedDays===0){ alert(lang==="es"?"Selecciona al menos un día.":"Select at least one day."); return; }
+    const emp = employees.find(e=>e.id===Number(empId));
+    const shifts = weekDates
+      .filter((_,i)=>days[i])
+      .map(date=>({ id:Date.now()+Math.random(), employeeId:emp.id, employeeName:emp.name, date, start, end, hours, status:"scheduled" }));
+    onSave(shifts);
+    setSaved(true);
+  };
+
+  return (
+    <Modal title={lang==="es"?"📅 Programar Semana":"📅 Schedule Week"} onClose={onClose} width={580}>
+      {/* Employee */}
+      <Field label={lang==="es"?"Empleado":"Employee"}>
+        <select style={{...({border:`1.5px solid #E2E8F0`,borderRadius:9,padding:"9px 12px",fontSize:13,width:"100%",outline:"none",background:"#fff",color:"#1a1a2e"}), width:"100%"}} value={empId} onChange={e=>setEmpId(e.target.value)}>
+          <option value="">{lang==="es"?"— Seleccionar empleado —":"— Select employee —"}</option>
+          {employees.map(e=><option key={e.id} value={e.id}>{e.name} ({roleLabels[e.role]||e.role})</option>)}
+        </select>
+      </Field>
+
+      {/* Week picker */}
+      <Field label={lang==="es"?"Semana (selecciona cualquier día)":"Week (pick any day in the week)"}>
+        <input style={{border:`1.5px solid #E2E8F0`,borderRadius:9,padding:"9px 12px",fontSize:13,width:"100%",outline:"none"}}
+          type="date" value={weekStart}
+          onChange={e=>setWeekStart(getMonday(e.target.value))} />
+      </Field>
+      <div style={{ fontSize:12, color:"#64748B", marginBottom:16, marginTop:-8 }}>
+        📅 {lang==="es"?"Semana del":"Week of"} <b>{weekStart}</b> {lang==="es"?"al":"to"} <b>{weekDates[6]}</b>
+      </div>
+
+      {/* Hours */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
+        <Field label={lang==="es"?"Hora Entrada":"Start Time"}>
+          <input style={{border:`1.5px solid #E2E8F0`,borderRadius:9,padding:"9px 12px",fontSize:13,width:"100%",outline:"none"}}
+            type="time" value={start} onChange={e=>setStart(e.target.value)} />
+        </Field>
+        <Field label={lang==="es"?"Hora Salida":"End Time"}>
+          <input style={{border:`1.5px solid #E2E8F0`,borderRadius:9,padding:"9px 12px",fontSize:13,width:"100%",outline:"none"}}
+            type="time" value={end} onChange={e=>setEnd(e.target.value)} />
+        </Field>
+      </div>
+
+      {/* Duration info */}
+      <div style={{ background:"#FFF7ED", borderRadius:9, padding:"8px 14px", marginBottom:16, fontSize:12, fontWeight:700, color:"#C2410C" }}>
+        ⏱ {hours}h {lang==="es"?"por turno":"per shift"} &nbsp;·&nbsp; {selectedDays} {lang==="es"?"días seleccionados":"days selected"} &nbsp;·&nbsp; {(hours*selectedDays).toFixed(1)}h {lang==="es"?"total":"total"}
+      </div>
+
+      {/* Day selector */}
+      <div style={{ marginBottom:20 }}>
+        <div style={{ fontSize:12, fontWeight:700, color:"#64748B", marginBottom:10 }}>
+          {lang==="es"?"Días de trabajo (desmarca los días libres):":"Work days (uncheck days off):"}
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:6 }}>
+          {DAY_NAMES.map((d,i)=>(
+            <div key={i} onClick={()=>toggleDay(i)}
+              style={{ textAlign:"center", padding:"10px 4px", borderRadius:10, cursor:"pointer", border:`2px solid ${days[i]?"#E8650A":"#E2E8F0"}`, background:days[i]?"#FFF7ED":"#F8FAFC", transition:"all 0.15s" }}>
+              <div style={{ fontSize:11, fontWeight:800, color:days[i]?"#C2410C":"#94A3B8" }}>{d}</div>
+              <div style={{ fontSize:10, color:"#94A3B8", marginTop:2 }}>{weekDates[i]?.slice(5)}</div>
+              <div style={{ marginTop:4, fontSize:16 }}>{days[i]?"✅":"❌"}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Preview */}
+      {empId && selectedDays>0 && (
+        <div style={{ background:"#F0FDF4", borderRadius:9, padding:"10px 14px", marginBottom:16, fontSize:12 }}>
+          <div style={{ fontWeight:800, color:"#166534", marginBottom:6 }}>
+            {lang==="es"?"Vista previa — Turnos a crear:":"Preview — Shifts to create:"}
+          </div>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+            {weekDates.filter((_,i)=>days[i]).map(date=>(
+              <span key={date} style={{ background:"#DCFCE7", color:"#166534", borderRadius:6, padding:"3px 8px", fontSize:11, fontWeight:700 }}>
+                {date} {start}→{end}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <button style={{ background:"#E8650A", color:"#fff", border:"none", borderRadius:10, padding:"12px 0", width:"100%", fontSize:14, fontWeight:800, cursor:"pointer" }} onClick={handleSave}>
+        📅 {lang==="es"?`Crear ${selectedDays} Turno${selectedDays!==1?"s":""}`:`Create ${selectedDays} Shift${selectedDays!==1?"s":""}`}
+      </button>
+    </Modal>
   );
 }
 
