@@ -972,10 +972,34 @@ function POS({ state, dispatch, prefillClientId }) {
 // SUBSCRIPTION PLANS
 // ═══════════════════════════════════════════════════════════════════════════
 const SUB_PLANS = [
-  { id: "monthly",   label: "Monthly",   labelEs: "Mensual",    days: 30  },
-  { id: "quarterly", label: "Quarterly", labelEs: "Trimestral", days: 90  },
-  { id: "biannual",  label: "Bi-Annual", labelEs: "Semestral",  days: 180 },
-  { id: "annual",    label: "Annual",    labelEs: "Anual",      days: 365 },
+  {
+    id:"basico", label:"Básico", labelEs:"Básico", days:30,
+    price:1200, lbs:45, color:"#16A34A", colorL:"#DCFCE7",
+    features:["Hasta 45 lb / mes","2 pickups incluidos","Wash & fold","Ropa blanca incluida"],
+    featuresNo:["Sin express"],
+    badge:"",
+  },
+  {
+    id:"popular", label:"Más Popular ⭐", labelEs:"Más Popular ⭐", days:30,
+    price:2500, lbs:80, color:"#7C3AED", colorL:"#EDE9FE",
+    features:["Hasta 80 lb / mes","4 pickups + entregas","Wash & fold","Ropa blanca incluida"],
+    featuresNo:["Sin express"],
+    badge:"MÁS POPULAR",
+  },
+  {
+    id:"plus", label:"Plus", labelEs:"Plus", days:30,
+    price:3400, lbs:105, color:"#0891B2", colorL:"#CFFAFE",
+    features:["Hasta 105 lb / mes","Pickups ilimitados","Wash, fold & plancha","Trajes y vestidos"],
+    featuresNo:["Sin express"],
+    badge:"",
+  },
+  {
+    id:"custom", label:"Custom (Empresas)", labelEs:"Custom (Empresas)", days:30,
+    price:0, lbs:null, color:"#1E293B", colorL:"#F1F5F9",
+    features:["Volumen alto (hotel, spa...)","Servicio dedicado","Factura mensual","SLA garantizado","Precio negociado"],
+    featuresNo:[],
+    badge:"EMPRESAS",
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1154,60 +1178,126 @@ function Clients({ state, dispatch, onNewInvoice }) {
 
       {/* ── Subscriptions tab ── */}
       {mainTab === "subscriptions" && (
-        <div style={S.card}>
-          {subs.length === 0 ? (
-            <div style={{ textAlign:"center", color:C.gray400, padding:48 }}>
-              <div style={{ fontSize:40, marginBottom:12 }}>🔄</div>
-              <div style={{ fontWeight:700, fontSize:15 }}>{t.no_subscriptions}</div>
-            </div>
-          ) : (
-            <table style={S.table}>
-              <thead>
-                <tr>{[t.client_col,t.sub_plan,t.amount,t.start_date,t.expiration,t.days_left,t.status,t.actions].map(h => <th key={h} style={S.th}>{h}</th>)}</tr>
-              </thead>
-              <tbody>
-                {[...subs].sort((a,b) => b.id - a.id).map(sub => {
+        <div>
+          {/* Plan Cards Overview */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))", gap:14, marginBottom:24 }}>
+            {SUB_PLANS.map(plan=>{
+              const activeSubs = subs.filter(s=>s.plan===plan.id && effectiveStatus(s)==="active");
+              return (
+                <div key={plan.id} style={{ ...S.card, padding:"16px 18px", borderTop:`4px solid ${plan.color}` }}>
+                  {plan.badge && <div style={{ fontSize:10, fontWeight:900, color:plan.color, letterSpacing:1, marginBottom:6 }}>{plan.badge}</div>}
+                  <div style={{ fontWeight:800, fontSize:14, color:plan.color, marginBottom:4 }}>{plan.label}</div>
+                  {plan.lbs && <div style={{ fontSize:12, color:C.gray500, marginBottom:8 }}>Hasta {plan.lbs} lb / mes</div>}
+                  <div style={{ fontSize:20, fontWeight:900, color:C.gray900, marginBottom:4 }}>
+                    {plan.price>0 ? fmtCurrency(plan.price) : <span style={{ fontSize:14 }}>A Medida</span>}
+                    {plan.price>0 && <span style={{ fontSize:11, color:C.gray400, fontWeight:400 }}>/mes</span>}
+                  </div>
+                  <div style={{ fontSize:12, color:C.gray400 }}>
+                    <b style={{ color:plan.color, fontSize:18 }}>{activeSubs.length}</b> {lang==="es"?"suscriptores activos":"active subscribers"}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Subscriber List */}
+          <div style={S.card}>
+            <div style={{ fontWeight:800, fontSize:14, marginBottom:16, color:C.gray800 }}>📋 {lang==="es"?"Lista de Suscriptores":"Subscriber List"}</div>
+            {subs.length===0 ? (
+              <div style={{ textAlign:"center", color:C.gray400, padding:48 }}>
+                <div style={{ fontSize:40, marginBottom:12 }}>🔄</div>
+                <div style={{ fontWeight:700, fontSize:15 }}>{t.no_subscriptions}</div>
+              </div>
+            ) : (
+              <div style={{ display:"grid", gap:12 }}>
+                {[...subs].sort((a,b)=>b.id-a.id).map(sub=>{
                   const es  = effectiveStatus(sub);
                   const dl  = daysLeft(sub);
-                  const [sbg, sfg] = SUB_BADGE[es] || [C.gray200,C.gray500];
-                  const plan = SUB_PLANS.find(p => p.id === sub.plan);
-                  const dlColor = dl > 7 ? C.green : dl > 0 ? C.yellow : C.red;
+                  const plan = SUB_PLANS.find(p=>p.id===sub.plan);
+                  const [sbg,sfg] = SUB_BADGE[es]||[C.gray200,C.gray500];
+                  const isLate    = dl < 0;
+                  const daysLate  = Math.abs(dl);
+                  const dlColor   = dl>7?C.green:dl>0?C.yellow:C.red;
+
                   return (
-                    <tr key={sub.id}>
-                      <td style={S.td}><b>{sub.clientName}</b></td>
-                      <td style={S.td}>{plan ? planLabel(plan) : sub.plan}</td>
-                      <td style={{ ...S.td, fontWeight:700, color:C.green }}>{fmtCurrency(sub.amount)}</td>
-                      <td style={{ ...S.td, fontSize:12 }}>{sub.startDate}</td>
-                      <td style={{ ...S.td, fontSize:12, fontWeight:700 }}>{sub.expirationDate}</td>
-                      <td style={S.td}>
-                        {es === "cancelled" || es === "on_hold"
-                          ? <span style={{ color:C.gray400 }}>—</span>
-                          : <span style={{ fontWeight:700, color:dlColor }}>{dl > 0 ? `${dl}d` : "0d"}</span>
-                        }
-                      </td>
-                      <td style={S.td}><span style={S.badge(sbg,sfg)}>{statusLabel(es)}</span></td>
-                      <td style={S.td}>
-                        <div style={{ display:"flex", gap:5 }}>
-                          {es !== "cancelled" && (
-                            <button style={S.btnSm(C.greenL,C.green)} onClick={() => renewSub(sub)}>{t.renew}</button>
-                          )}
-                          {es === "active" && (
-                            <button style={S.btnSm(C.yellowL,C.yellow)} onClick={() => dispatch({ type:"UPDATE_SUBSCRIPTION", sub:{ ...sub, status:"on_hold" } })}>{t.hold_sub}</button>
-                          )}
-                          {es === "on_hold" && (
-                            <button style={S.btnSm(C.tealL,C.teal)} onClick={() => dispatch({ type:"UPDATE_SUBSCRIPTION", sub:{ ...sub, status:"active" } })}>{t.resume_sub}</button>
-                          )}
-                          {es !== "cancelled" && (
-                            <button style={S.btnSm(C.redL,C.red)} onClick={() => { if (confirm(t.confirm_cancel_sub)) dispatch({ type:"UPDATE_SUBSCRIPTION", sub:{ ...sub, status:"cancelled" } }); }}>{t.cancel_sub}</button>
+                    <div key={sub.id} style={{ ...S.cardSm, border:`1px solid ${isLate&&es!=="cancelled"?C.red+"44":C.gray200}`, background:isLate&&es!=="cancelled"?C.redL+"44":"#fff" }}>
+                      <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", flexWrap:"wrap", gap:12 }}>
+                        {/* Left: client info */}
+                        <div style={{ flex:1, minWidth:160 }}>
+                          <div style={{ fontWeight:800, fontSize:15, color:C.gray900, marginBottom:4 }}>{sub.clientName}</div>
+                          <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+                            <span style={{ fontSize:12, fontWeight:700, color:plan?.color||C.gray500, background:(plan?.colorL||C.gray100), borderRadius:20, padding:"2px 10px" }}>
+                              {plan?.label||sub.plan}
+                            </span>
+                            <span style={S.badge(sbg,sfg)}>{statusLabel(es)}</span>
+                            {sub.paid && <span style={S.badge(C.greenL,C.green)}>✅ {lang==="es"?"Pagado":"Paid"}</span>}
+                          </div>
+                        </div>
+
+                        {/* Middle: dates & amount */}
+                        <div style={{ fontSize:12, color:C.gray500, textAlign:"center" }}>
+                          <div><b style={{ color:C.gray700 }}>{fmtCurrency(sub.amount)}</b>/mes</div>
+                          <div>{lang==="es"?"Inicio:":"Start:"} {sub.startDate}</div>
+                          <div>{lang==="es"?"Vence:":"Expires:"} <b style={{ color:plan?.color||C.gray600 }}>{sub.expirationDate}</b></div>
+                        </div>
+
+                        {/* Right: days left / late */}
+                        <div style={{ textAlign:"center", minWidth:90 }}>
+                          {es==="cancelled"||es==="on_hold" ? (
+                            <span style={{ color:C.gray400, fontSize:12 }}>—</span>
+                          ) : isLate ? (
+                            <div>
+                              <div style={{ fontSize:20, fontWeight:900, color:C.red }}>{daysLate}d</div>
+                              <div style={{ fontSize:10, color:C.red, fontWeight:700 }}>{lang==="es"?"VENCIDO":"OVERDUE"}</div>
+                            </div>
+                          ) : (
+                            <div>
+                              <div style={{ fontSize:20, fontWeight:900, color:dlColor }}>{dl}d</div>
+                              <div style={{ fontSize:10, color:dlColor, fontWeight:700 }}>{lang==="es"?"RESTANTES":"LEFT"}</div>
+                            </div>
                           )}
                         </div>
-                      </td>
-                    </tr>
+                      </div>
+
+                      {/* Actions */}
+                      <div style={{ display:"flex", gap:8, marginTop:12, flexWrap:"wrap" }}>
+                        {es!=="cancelled" && (
+                          <button style={{ ...S.btnSm(C.greenL,C.green) }} onClick={()=>renewSub(sub)}>
+                            🔄 {t.renew}
+                          </button>
+                        )}
+                        {!sub.paid && es!=="cancelled" && (
+                          <button style={{ ...S.btnSm(C.tealL,C.teal) }} onClick={()=>dispatch({type:"UPDATE_SUBSCRIPTION",sub:{...sub,paid:true}})}>
+                            💳 {lang==="es"?"Marcar Pagado":"Mark Paid"}
+                          </button>
+                        )}
+                        {sub.paid && (
+                          <button style={{ ...S.btnSm(C.gray100,C.gray500) }} onClick={()=>dispatch({type:"UPDATE_SUBSCRIPTION",sub:{...sub,paid:false}})}>
+                            ↩ {lang==="es"?"Desmarcar Pago":"Unmark Paid"}
+                          </button>
+                        )}
+                        {es==="active" && (
+                          <button style={{ ...S.btnSm(C.yellowL,C.yellow) }} onClick={()=>dispatch({type:"UPDATE_SUBSCRIPTION",sub:{...sub,status:"on_hold"}})}>
+                            ⏸ {t.hold_sub}
+                          </button>
+                        )}
+                        {es==="on_hold" && (
+                          <button style={{ ...S.btnSm(C.tealL,C.teal) }} onClick={()=>dispatch({type:"UPDATE_SUBSCRIPTION",sub:{...sub,status:"active"}})}>
+                            ▶ {t.resume_sub}
+                          </button>
+                        )}
+                        {es!=="cancelled" && (
+                          <button style={{ ...S.btnSm(C.redL,C.red) }} onClick={()=>{ if(confirm(t.confirm_cancel_sub)) dispatch({type:"UPDATE_SUBSCRIPTION",sub:{...sub,status:"cancelled"}}); }}>
+                            ✕ {t.cancel_sub}
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   );
                 })}
-              </tbody>
-            </table>
-          )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -1248,26 +1338,43 @@ function Clients({ state, dispatch, onNewInvoice }) {
       {subModal && (() => {
         const client = state.clients.find(c => c.id === subModal);
         const plan   = SUB_PLANS.find(p => p.id === subForm.plan);
-        const previewExp = subForm.startDate && plan ? (() => { const d = new Date(subForm.startDate); d.setDate(d.getDate() + plan.days); return d.toISOString().split("T")[0]; })() : null;
+        const previewExp = subForm.startDate && plan ? (() => { const d=new Date(subForm.startDate); d.setDate(d.getDate()+plan.days); return d.toISOString().split("T")[0]; })() : null;
         return (
-          <Modal title={`${t.new_subscription} — ${client?.name}`} onClose={() => setSubModal(null)} width={430}>
-            <Field label={t.sub_plan}>
-              <select style={S.input} value={subForm.plan} onChange={e => setSubForm(f => ({ ...f, plan:e.target.value }))}>
-                {SUB_PLANS.map(p => <option key={p.id} value={p.id}>{planLabel(p)} — {p.days} {t.sub_days}</option>)}
-              </select>
-            </Field>
+          <Modal title={`${t.new_subscription} — ${client?.name}`} onClose={() => setSubModal(null)} width={500}>
+            {/* Plan selector cards */}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
+              {SUB_PLANS.map(p=>(
+                <div key={p.id} onClick={()=>setSubForm(f=>({...f,plan:p.id,amount:p.price||""}))}
+                  style={{ border:`2px solid ${subForm.plan===p.id?p.color:C.gray200}`, borderRadius:12, padding:"12px 14px", cursor:"pointer", background:subForm.plan===p.id?p.colorL:"#fff", transition:"all 0.2s" }}>
+                  {p.badge && <div style={{ fontSize:9, fontWeight:900, color:p.color, letterSpacing:1 }}>{p.badge}</div>}
+                  <div style={{ fontWeight:800, fontSize:13, color:p.color }}>{p.label}</div>
+                  {p.lbs && <div style={{ fontSize:11, color:C.gray500 }}>Hasta {p.lbs} lb</div>}
+                  <div style={{ fontSize:15, fontWeight:900, color:C.gray900, marginTop:4 }}>
+                    {p.price>0?fmtCurrency(p.price):"A Medida"}
+                    {p.price>0&&<span style={{ fontSize:10, color:C.gray400 }}>/mes</span>}
+                  </div>
+                  <div style={{ marginTop:6 }}>
+                    {p.features.slice(0,3).map((f,i)=><div key={i} style={{ fontSize:10, color:C.gray600 }}>✓ {f}</div>)}
+                  </div>
+                </div>
+              ))}
+            </div>
+
             <Field label={t.sub_amount}>
-              <input style={S.input} type="number" value={subForm.amount} onChange={e => setSubForm(f => ({ ...f, amount:e.target.value }))} placeholder="RD$0" />
+              <input style={S.input} type="number" value={subForm.amount}
+                onChange={e=>setSubForm(f=>({...f,amount:e.target.value}))}
+                placeholder={plan?.price>0?`RD$${plan.price}`:"Precio negociado"} />
             </Field>
             <Field label={t.start_date}>
-              <input style={S.input} type="date" value={subForm.startDate} onChange={e => setSubForm(f => ({ ...f, startDate:e.target.value }))} />
+              <input style={S.input} type="date" value={subForm.startDate}
+                onChange={e=>setSubForm(f=>({...f,startDate:e.target.value}))} />
             </Field>
             {previewExp && (
               <div style={{ background:C.purpleL, borderRadius:9, padding:"10px 14px", marginBottom:14, fontSize:12, color:C.purple, fontWeight:700 }}>
                 📅 {t.expiration}: <b>{previewExp}</b> &nbsp;·&nbsp; {plan.days} {t.sub_days}
               </div>
             )}
-            <button style={{ ...S.btn(C.purple), width:"100%", justifyContent:"center", padding:"11px 0" }} onClick={addSubscription}>
+            <button style={{ ...S.btn(), background:plan?.color||C.orange, width:"100%", justifyContent:"center", padding:"11px 0" }} onClick={addSubscription}>
               {t.save_subscription}
             </button>
           </Modal>
