@@ -921,7 +921,7 @@ function POS({ state, dispatch, prefillClientId }) {
                 {SERVICE_CATALOG.map(s => <option key={s.name} value={s.name}>{svcLabel(s)} ({fmtCurrency(s.price)})</option>)}
               </select>
               <input type="number" style={S.input} value={line.qty} min={1} onChange={e => updateLine(i, "qty", e.target.value)} placeholder={t.qty} />
-              <input type="number" style={S.input} value={line.price} onChange={e => updateLine(i, "price", e.target.value)} placeholder={lang === "es" ? "Precio" : "Price"} />
+              <input type="number" style={{ ...S.input, width:90, background:C.gray50, color:C.gray500, cursor:"not-allowed" }} value={line.price} readOnly placeholder={lang==="es"?"Precio":"Price"} />
               <button style={S.btnSm(C.redL, C.red)} onClick={() => removeLine(i)}>✕</button>
             </div>
           ))}
