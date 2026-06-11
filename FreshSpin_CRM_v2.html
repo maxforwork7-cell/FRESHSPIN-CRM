@@ -662,22 +662,22 @@ function Dashboard({ state, setActive }) {
 // SERVICE CATALOG
 // ═══════════════════════════════════════════════════════════════════════════
 const SERVICE_CATALOG = [
-  { name: "Wash & Fold (per lb)",                              nameEs: "Lavar & Doblar (por libra)",                          price:  75 },
-  { name: "Wash & Fold — White Clothes (per lb)",              nameEs: "Lavar & Doblar — Ropa Blanca (por libra)",            price: 100 },
-  { name: "Wash & Fold — Curtains/Blankets/Towels (per lb)",   nameEs: "Lavar & Doblar — Cortinas/Frazadas/Toallas (por lb)", price: 100 },
+  { name: "Wash & Fold (per lb)",                              nameEs: "Lavar & Doblar (por libra)",                          price:  45 },
+  { name: "Wash & Fold — White Clothes (per lb)",              nameEs: "Lavar & Doblar — Ropa Blanca (por libra)",            price:  50 },
+  { name: "Wash & Fold — Curtains/Blankets/Towels (per lb)",   nameEs: "Lavar & Doblar — Cortinas/Frazadas/Toallas (por lb)", price:  75 },
   { name: "Wash — Dress (per unit)",                           nameEs: "Lavar — Vestido (por unidad)",                        price: 200 },
   { name: "Wash — Suit (per unit)",                            nameEs: "Lavar — Traje (por unidad)",                          price: 200 },
   { name: "Iron & Press — Shirt (per unit)",                   nameEs: "Planchar — Camisa (por unidad)",                      price:  60 },
   { name: "Iron & Press — Pants (per unit)",                   nameEs: "Planchar — Pantalón (por unidad)",                    price:  60 },
-  { name: "Iron & Press — Dress (per unit)",                   nameEs: "Planchar — Vestido (por unidad)",                     price: 250 },
-  { name: "Iron & Press — Suit (per unit)",                    nameEs: "Planchar — Traje (por unidad)",                       price: 250 },
-  { name: "Wash & Press — Dress (per unit)",                   nameEs: "Lavar & Planchar — Vestido (por unidad)",             price: 325 },
-  { name: "Wash & Press — Suit (per unit)",                    nameEs: "Lavar & Planchar — Traje (por unidad)",               price: 325 },
-  { name: "Wash Machine Rent (8h)",                            nameEs: "Alquiler de Lavadora (8h)",                           price: 400 },
-  { name: "Sneakers Cleaning",                                 nameEs: "Limpieza de Tenis",                                   price: 300 },
+  { name: "Iron & Press — Dress (per unit)",                   nameEs: "Planchar — Vestido (por unidad)",                     price: 200 },
+  { name: "Iron & Press — Suit (per unit)",                    nameEs: "Planchar — Traje (por unidad)",                       price: 200 },
+  { name: "Wash & Press — Dress (per unit)",                   nameEs: "Lavar & Planchar — Vestido (por unidad)",             price: 350 },
+  { name: "Wash & Press — Suit (per unit)",                    nameEs: "Lavar & Planchar — Traje (por unidad)",               price: 350 },
+  { name: "Wash Machine Rent (12h)",                           nameEs: "Alquiler de Lavadora (12h)",                          price: 400 },
+  { name: "Sneakers Cleaning",                                 nameEs: "Limpieza de Tenis",                                   price: 250 },
   { name: "Express",                                           nameEs: "Expreso",                                             price: 100 },
   { name: "Delivery (local)",                                  nameEs: "Entrega Local",                                       price: 100 },
-  { name: "Delivery (extended)",                               nameEs: "Entrega a Domicilio",                                 price: 150 },
+  { name: "Long Delivery",                                     nameEs: "Entrega a Domicilio",                                 price: 150 },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -693,6 +693,7 @@ function POS({ state, dispatch, prefillClientId }) {
   const [showDropdown,   setShowDropdown]   = useState(false);
   const [lines,          setLines]          = useState([{ name: "", qty: 1, price: 0 }]);
   const [invoiceNote,    setInvoiceNote]    = useState("");
+  const [discount,       setDiscount]       = useState({ type:"percent", value:"" });
   const [printInv,       setPrintInv]       = useState(null);
   const [filter,         setFilter]         = useState("all");
   const [search,         setSearch]         = useState("");
@@ -712,7 +713,13 @@ function POS({ state, dispatch, prefillClientId }) {
     const svc = SERVICE_CATALOG.find(s => s.name === name);
     setLines(prev => prev.map((l, idx) => idx === i ? { ...l, name, price: svc?.price || 0 } : l));
   };
-  const total = lines.reduce((s, l) => s + Number(l.qty) * Number(l.price), 0);
+  const subtotal = lines.reduce((s, l) => s + Number(l.qty) * Number(l.price), 0);
+  const discountAmt = discount.value
+    ? discount.type==="percent"
+      ? subtotal * (Math.min(100, Math.max(0, Number(discount.value))) / 100)
+      : Math.min(subtotal, Math.max(0, Number(discount.value)))
+    : 0;
+  const total = subtotal - discountAmt;
 
   const clientMatches = clientSearch.trim().length > 0
     ? state.clients.filter(c => {
@@ -736,6 +743,7 @@ function POS({ state, dispatch, prefillClientId }) {
     const inv = {
       id: `INV-${uid()}`, clientId: client.id, clientName: client.name,
       services: lines.filter(l => l.name), total,
+      subtotal, discountAmt, discountType: discount.type, discountValue: discount.value,
       date: today(), status: "pending",
       createdBy: state.currentUser.name, notes: invoiceNote,
     };
@@ -744,11 +752,13 @@ function POS({ state, dispatch, prefillClientId }) {
     setView("print");
     setLines([{ name: "", qty: 1, price: 0 }]);
     setSelectedClient(""); setClientSearch(""); setInvoiceNote("");
+    setDiscount({ type:"percent", value:"" });
   };
 
   const resetNew = () => {
     setView("list"); setSelectedClient(""); setClientSearch(""); setInvoiceNote("");
     setLines([{ name: "", qty: 1, price: 0 }]);
+    setDiscount({ type:"percent", value:"" });
   };
 
   const displayed = [...state.invoices]
@@ -800,7 +810,21 @@ function POS({ state, dispatch, prefillClientId }) {
             })}
           </tbody>
         </table>
-        <div style={{ textAlign: "right", fontSize: 20, fontWeight: 900, color: C.orange, marginBottom: 8 }}>Total: {fmtCurrency(printInv.total)}</div>
+        <div style={{ textAlign:"right", marginBottom:8 }}>
+          {printInv.discountAmt>0 && (
+            <>
+              <div style={{ fontSize:14, color:C.gray500 }}>
+                {lang==="es"?"Subtotal:":"Subtotal:"} {fmtCurrency(printInv.subtotal||printInv.total)}
+              </div>
+              <div style={{ fontSize:14, color:C.green, fontWeight:700 }}>
+                🏷 {lang==="es"?"Descuento:":"Discount:"}
+                -{fmtCurrency(printInv.discountAmt)}
+                {printInv.discountType==="percent"?` (${printInv.discountValue}%)`:""}
+              </div>
+            </>
+          )}
+          <div style={{ fontSize:20, fontWeight:900, color:C.orange }}>Total: {fmtCurrency(printInv.total)}</div>
+        </div>
         {printInv.notes && <div style={{ fontSize: 12, color: C.gray500, marginBottom: 12 }}>{lang === "es" ? "Nota" : "Note"}: {printInv.notes}</div>}
         <div style={{ fontSize: 11, color: C.gray400, textAlign: "center", marginBottom: 16 }}>
           {lang === "es" ? "¡Gracias por elegir FreshSpin! · Thank you!" : "Thank you for choosing FreshSpin · ¡Gracias!"}
@@ -908,9 +932,48 @@ function POS({ state, dispatch, prefillClientId }) {
           <input style={S.input} value={invoiceNote} onChange={e => setInvoiceNote(e.target.value)} placeholder={t.internal_note} />
         </Field>
 
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16, paddingTop: 16, borderTop: `1px solid ${C.gray100}` }}>
-          <div style={{ fontSize: 22, fontWeight: 900, color: C.orange }}>Total: {fmtCurrency(total)}</div>
-          <button style={{ ...S.btn(), padding: "11px 24px" }} onClick={createInvoice}>{t.generate_invoice}</button>
+        {/* Discount */}
+        <div style={{ background:C.gray50, borderRadius:10, padding:"14px 16px", marginBottom:4 }}>
+          <div style={{ fontSize:12, fontWeight:700, color:C.gray600, marginBottom:10 }}>
+            🏷 {lang==="es"?"Descuento (opcional)":"Discount (optional)"}
+          </div>
+          <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+            <select style={{ ...S.input, width:140 }} value={discount.type} onChange={e=>setDiscount(d=>({...d,type:e.target.value,value:""}))}>
+              <option value="percent">{lang==="es"?"% Porcentaje":"% Percent"}</option>
+              <option value="fixed">{lang==="es"?"RD$ Monto Fijo":"RD$ Fixed Amount"}</option>
+            </select>
+            <input style={{ ...S.input, width:120 }} type="number" min="0"
+              max={discount.type==="percent"?"100":undefined}
+              value={discount.value}
+              onChange={e=>setDiscount(d=>({...d,value:e.target.value}))}
+              placeholder={discount.type==="percent"?"0%":"RD$0"} />
+            {discount.value && <button style={S.btnSm(C.redL,C.red)} onClick={()=>setDiscount({type:"percent",value:""})}>✕</button>}
+          </div>
+          {discount.value>0 && (
+            <div style={{ marginTop:8, fontSize:12, color:C.green, fontWeight:700 }}>
+              ✅ {lang==="es"?"Descuento aplicado:":"Discount applied:"} -{fmtCurrency(discountAmt)}
+              {discount.type==="percent" && ` (${discount.value}%)`}
+            </div>
+          )}
+        </div>
+
+        <div style={{ marginTop:12, paddingTop:12, borderTop:`1px solid ${C.gray100}` }}>
+          {discountAmt>0 && (
+            <div style={{ display:"flex", justifyContent:"space-between", fontSize:14, color:C.gray500, marginBottom:4 }}>
+              <span>{lang==="es"?"Subtotal:":"Subtotal:"}</span>
+              <span style={{ textDecoration:"line-through" }}>{fmtCurrency(subtotal)}</span>
+            </div>
+          )}
+          {discountAmt>0 && (
+            <div style={{ display:"flex", justifyContent:"space-between", fontSize:14, color:C.green, marginBottom:4 }}>
+              <span>{lang==="es"?"Descuento:":"Discount:"}</span>
+              <span>-{fmtCurrency(discountAmt)}</span>
+            </div>
+          )}
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <div style={{ fontSize:22, fontWeight:900, color:C.orange }}>Total: {fmtCurrency(total)}</div>
+            <button style={{ ...S.btn(), padding:"11px 24px" }} onClick={createInvoice}>{t.generate_invoice}</button>
+          </div>
         </div>
       </div>
     </div>
